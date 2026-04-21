@@ -2,9 +2,9 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0",
-	"FriendlyName": "CAD_Optimizer",
+	"FriendlyName": "CAD Optimizer",
 	"Description": "Optimize GM Vehicle Mesh",
-	"Category": "Other",
+	"Category": "Editor",
 	"CreatedBy": "Philip Choi",
 	"CreatedByURL": "",
 	"DocsURL": "",
@@ -13,5 +13,12 @@
 	"CanContainContent": true,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
-	"Installed": false
+	"Installed": false,
+	"EnabledByDefault": true,
+	"Plugins": [
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		}
+	]
 }
