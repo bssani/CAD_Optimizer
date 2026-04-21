@@ -105,7 +105,7 @@
 | 의사결정 기록 | `docs/decisions/ADR_*.md` |
 | 실패/함정 | `docs/lessons_learned/*.md` |
 | 학습 노트 (필립 작성) | `docs/concepts/*.md` |
-| Plugin 소스 | `Python/` + `Content/EditorWidgets/` |
+| Plugin 소스 | `Content/Python/cad_optimizer/` + `Content/EditorWidgets/` |
 
 ## 9. 세션 시작 시 권장 절차
 

@@ -87,36 +87,42 @@ CAD_Optimizer/                              (git repo root)
 ├── README.md
 ├── CAD_Optimizer.uplugin
 ├── Content/
+│   ├── Python/                            ★ UE PythonScriptPlugin auto-discovery 경로
+│   │   ├── init_unreal.py                 ← editor startup 시 자동 실행
+│   │   └── cad_optimizer/                 ← namespace package (이름 충돌 방지)
+│   │       ├── __init__.py
+│   │       ├── infrastructure/            # F0
+│   │       │   ├── __init__.py
+│   │       │   ├── slow_task.py
+│   │       │   ├── batch_processor.py
+│   │       │   └── logger.py
+│   │       ├── core/
+│   │       │   ├── __init__.py
+│   │       │   ├── mesh_stats.py          # F2
+│   │       │   ├── instance_detector.py   # F3
+│   │       │   ├── small_part_filter.py   # F4
+│   │       │   ├── naming_filter.py       # F5
+│   │       │   ├── material_consolidator.py  # F6
+│   │       │   ├── reporter.py            # F7
+│   │       │   └── metadata_tagger.py     # F8
+│   │       ├── utils/
+│   │       │   ├── __init__.py
+│   │       │   ├── mesh_hashing.py
+│   │       │   └── ue_helpers.py
+│   │       └── ui/
+│   │           ├── __init__.py
+│   │           └── widget_handlers.py
 │   ├── EditorWidgets/
 │   │   └── EUW_MainPanel.uasset
 │   └── Icons/
 ├── Resources/
 │   └── Icon128.png
-├── Python/
-│   ├── __init__.py
-│   ├── infrastructure/                    # F0
-│   │   ├── slow_task.py
-│   │   ├── batch_processor.py
-│   │   └── logger.py
-│   ├── core/
-│   │   ├── mesh_stats.py                 # F2
-│   │   ├── instance_detector.py          # F3
-│   │   ├── small_part_filter.py          # F4
-│   │   ├── naming_filter.py              # F5
-│   │   ├── material_consolidator.py      # F6
-│   │   ├── reporter.py                   # F7
-│   │   └── metadata_tagger.py            # F8
-│   ├── utils/
-│   │   ├── mesh_hashing.py
-│   │   └── ue_helpers.py
-│   └── ui/
-│       └── widget_handlers.py
 ├── docs/
 │   ├── Phase1_Kickoff.md
-│   ├── concepts/                         # 학습 노트
-│   ├── decisions/                        # ADR
-│   ├── lessons_learned/                  # 실패/함정
-│   └── weekly_log/                       # 주차별
+│   ├── concepts/                          # 학습 노트
+│   ├── decisions/                         # ADR
+│   ├── lessons_learned/                   # 실패/함정
+│   └── weekly_log/                        # 주차별
 └── tests/
     └── sample_scenes/
 ```
