@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 > AI (Claude)와 협업할 때 매 세션 시작 시 참조하는 프로젝트 컨텍스트 파일.
-> **버전**: v0.2 (2026-04-18, Gemini Pro 리뷰 반영)
+> **버전**: v0.4 (2026-04-23)
 
 ---
 
@@ -12,6 +12,7 @@
 **목적**: GM 차량 CAD 데이터를 PCVR용으로 최적화하는 draw call 감소 도구
 **사용자**: GMTCK PQDQ 팀 + 다른 부서
 **배포**: 사내 git 서버, plugin 형태로 UE 프로젝트에 drop-in
+**현재 타겟**: PCVR 전용 (Nanite 활용). Web/standalone용 mesh 감량(decimation, LOD)은 향후 별도 트랙(Phase W, 미정)으로 검토.
 
 ## 2. 사람 소개
 
@@ -140,6 +141,7 @@ Claude와 새 대화 시작할 때:
   - Lessons learned에 deprecated API 경고 추가
   - Repo 경로 명시 (`C:\Git\MeshOptimization\Plugins\CAD_Optimizer`)
 - **2026-04-23 (v0.3)**: Week 1 완료 반영 (§7 상태 업데이트)
+- **2026-04-23 (v0.4)**: §1에 타겟 범위 명시 — PCVR 전용, decimation/LOD는 Phase W 별도 트랙
 
 ---
 
