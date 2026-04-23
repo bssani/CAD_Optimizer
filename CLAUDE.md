@@ -78,11 +78,11 @@
 
 ## 7. Phase 현황
 
-**현재**: Phase 1 시작 전 (환경 세팅 마무리 중)
+**현재**: Phase 1 Week 2 진입 (Week 1 완료: 2026-04-23)
 
 **Phase 1 기능 (Week별)**:
-- Week 1: **F0 (infrastructure)** + F1 (plugin 골격)
-- Week 2: F2 (mesh 통계)
+- Week 1: **F0 (infrastructure)** + F1 (plugin 골격) ✅
+- Week 2: F2 (mesh 통계) ← **현재**
 - Week 3: F3 (instance detection) ★
 - Week 4: F4 (small part culling) + F5 (naming filter)
 - Week 5: F6 (material consolidation) + F7 (리포트) + **F8 (metadata tagging)**
@@ -139,7 +139,8 @@ Claude와 새 대화 시작할 때:
   - F8 (metadata tagging) 추가 → Phase 3 대비
   - Lessons learned에 deprecated API 경고 추가
   - Repo 경로 명시 (`C:\Git\MeshOptimization\Plugins\CAD_Optimizer`)
+- **2026-04-23 (v0.3)**: Week 1 완료 반영 (§7 상태 업데이트)
 
 ---
 
-*마지막 업데이트: 2026-04-18*
+*마지막 업데이트: 2026-04-23*
