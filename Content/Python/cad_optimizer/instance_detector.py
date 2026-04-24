@@ -64,6 +64,7 @@ class InstanceDetectionReport:
     skipped_non_static: int  # mobility != STATIC
     groups: List[InstanceGroup]  # sorted by count desc, includes singletons
     threshold: int
+    material_slot_mismatch_count: int = 0  # all mismatches, not just the first 5 logged
 
     @property
     def candidate_groups(self) -> List[InstanceGroup]:
@@ -166,9 +167,10 @@ def detect_instance_groups(
 
     Notes:
         - Material slot mismatch (``smc.get_num_materials()`` vs
-          ``sm.get_num_sections(0)``) emits ``unreal.log_warning`` at most
-          5 times per scan, then silently continues. Mismatches beyond
-          the cap are not counted anywhere (log-spam prevention).
+          ``sm.get_num_sections(0)``) is always tallied into
+          ``material_slot_mismatch_count``; ``unreal.log_warning`` fires
+          for at most the first 5 occurrences (log-spam cap, detection
+          count unaffected).
         - Groups are sorted by count desc, singletons included.
     """
     groups: dict[InstanceGroupKey, InstanceGroup] = {}
@@ -177,7 +179,8 @@ def detect_instance_groups(
     skipped_no_mesh = 0
     skipped_no_component = 0
     skipped_non_static = 0
-    mismatch_warnings = 0
+    mismatch_count = 0
+    mismatch_warnings_logged = 0
 
     for actor in actors:
         if should_cancel():
@@ -212,16 +215,17 @@ def detect_instance_groups(
 
         materials = _get_override_material_paths(smc)
 
-        if mismatch_warnings < _MATERIAL_MISMATCH_WARNING_CAP:
-            section_count = _get_num_sections(sm)
-            if len(materials) != section_count:
+        section_count = _get_num_sections(sm)
+        if len(materials) != section_count:
+            mismatch_count += 1
+            if mismatch_warnings_logged < _MATERIAL_MISMATCH_WARNING_CAP:
                 unreal.log_warning(
                     f"[F3] Material slot mismatch on "
                     f"'{actor.get_actor_label()}': "
                     f"{len(materials)} slots vs {section_count} sections "
                     f"(mesh: {_mesh_path(sm)}). Continuing."
                 )
-                mismatch_warnings += 1
+                mismatch_warnings_logged += 1
 
         key = InstanceGroupKey(
             mesh_path=_mesh_path(sm),
@@ -241,4 +245,5 @@ def detect_instance_groups(
         skipped_non_static=skipped_non_static,
         groups=sorted_groups,
         threshold=threshold,
+        material_slot_mismatch_count=mismatch_count,
     )

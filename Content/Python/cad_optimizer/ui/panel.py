@@ -255,6 +255,11 @@ def _write_instance_csv(
             f"# Threshold: {report.threshold} | "
             f"Recommendation: ISM for Nanite-first rendering\n"
         )
+        if report.material_slot_mismatch_count > 0:
+            f.write(
+                f"# Slot mismatches detected: "
+                f"{report.material_slot_mismatch_count}\n"
+            )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
@@ -293,12 +298,18 @@ def _log_instance_summary(
         f"  Skipped: {report.skipped_no_mesh} no-mesh, "
         f"{report.skipped_no_component} no-component, "
         f"{report.skipped_non_static} non-static",
+    ]
+    if report.material_slot_mismatch_count > 0:
+        lines.append(
+            f"  Slot mismatches: {report.material_slot_mismatch_count}"
+        )
+    lines.extend([
         f"  Groups: {len(report.groups)} unique "
         f"(threshold={report.threshold}, "
         f"{len(report.candidate_groups)} candidates)",
         f"  Est. drawcall reduction: "
         f"{report.estimated_drawcall_reduction} (추정치)",
-    ]
+    ])
 
     top = report.candidate_groups[:10]
     if top:
