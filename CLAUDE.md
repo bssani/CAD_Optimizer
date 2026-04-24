@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 > AI (Claude)와 협업할 때 매 세션 시작 시 참조하는 프로젝트 컨텍스트 파일.
-> **버전**: v0.4 (2026-04-23)
+> **버전**: v0.5 (2026-04-24, Week 2 발견 사항 §5 편입)
 
 ---
 
@@ -52,6 +52,10 @@
 - ❌ **UE Mesh Editor Simplify를 CAD mesh에 사용** — CAD 특성 대응 X
 - ❌ **Progress/cancel 없이 대량 처리** — 에디터 freeze (F0이 해결)
 - ❌ **Deprecated API 사용** (예: `EditorLevelLibrary` — UE 5.1에서 deprecated, `EditorActorSubsystem` 사용)
+- ❌ **Subsystem 직접 생성자 호출** (예: `unreal.EditorActorSubsystem()`) — 5.2+ deprecated.
+  반드시 `unreal.get_editor_subsystem(Cls)` 사용
+- ❌ **검증 없이 AI 제안 UE API 사용** — 추정 오답률 높음.
+  `dir()`로 존재 확인 + 한 줄 실험 후 반복문. 상세: `docs/lessons_learned/api_verification_first.md`
 
 ## 6. 작업 방식
 
@@ -142,7 +146,8 @@ Claude와 새 대화 시작할 때:
   - Repo 경로 명시 (`C:\Git\MeshOptimization\Plugins\CAD_Optimizer`)
 - **2026-04-23 (v0.3)**: Week 1 완료 반영 (§7 상태 업데이트)
 - **2026-04-23 (v0.4)**: §1에 타겟 범위 명시 — PCVR 전용, decimation/LOD는 Phase W 별도 트랙
+- **2026-04-24 (v0.5)**: Week 2 발견 사항 반영 — subsystem 생성 규칙, AI API 검증 원칙 §5 편입
 
 ---
 
-*마지막 업데이트: 2026-04-23*
+*마지막 업데이트: 2026-04-24*
