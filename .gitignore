@@ -77,3 +77,6 @@ DerivedDataCache/*
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Claude Code agent state
+.claude/
