@@ -1,21 +1,45 @@
-"""F2 runner + EUW glue.
+"""F2 + F3 runners + EUW glue.
 
-``run_scan_level`` is the single entry point:
-    - Called from the "Scan Level" button inside EUW → pushes stats
-      into the widget's ``lbl_*`` Text Blocks.
-    - Called from the Tools > Scan Level menu item → ``widget=None``
-      and results are dumped to the Output Log.
+F2 — ``run_scan_level`` (mesh stats diagnostic):
+    - EUW button → pushes stats into the widget's ``lbl_*`` Text Blocks.
+    - Tools > Scan Level → ``widget=None``, Output Log dump.
+
+F3 — ``run_detect_instances`` (ISM candidate detection):
+    - Tools > Detect Instances or EUW button → writes CSV report to
+      ``{project_saved_dir}/CAD_Optimizer/instance_report_{ts}.csv``
+      and logs a top-10 summary to Output Log.
+    - Detection-only. Level/actors are never mutated.
 
 Progress + cancel come from ``unreal.ScopedSlowTask`` directly, not
-``SlowIter``, because ``stats.collect_mesh_stats`` is callback-driven
-and must stay ignorant of SlowIter. Same underlying freeze-prevention
-mechanism; F0 pattern preserved.
+``SlowIter``, because the core modules (``stats``, ``instance_detector``)
+are callback-driven and must stay ignorant of SlowIter. Same underlying
+freeze-prevention mechanism; F0 pattern preserved.
+
+EUW Blueprint guide for the F3 entry (Philip sets this up in-editor):
+
+    Section: "F3 Instance Detection"
+      - SpinBox (int) : Threshold, default=10, min=2, max=1000
+                        (variable name: ``sb_f3_threshold``)
+      - Button         : "Run Detection"
+          OnClicked:
+            sb_f3_threshold.Value → Format Text:
+              "cad_optimizer.ui.panel.run_detect_instances(threshold={0})"
+            → Execute Python Command
+    Reuses the Format Text pattern established in F2 (week02.md §3).
 """
+from __future__ import annotations
+
+import csv
+import os
 from datetime import datetime
 from typing import Optional
 
 import unreal
 
+from cad_optimizer.instance_detector import (
+    InstanceDetectionReport,
+    detect_instance_groups,
+)
 from cad_optimizer.stats import MeshStatsReport, collect_mesh_stats
 
 
@@ -141,6 +165,157 @@ def _push_to_widget(widget, report: MeshStatsReport, skip_hidden: bool) -> None:
 
     _set_text(widget, "lbl_partial_badge", "⚠ 부분 결과 (취소됨)")
     _set_visible(widget, "lbl_partial_badge", report.cancelled)
+
+
+# ─── F3: Instance detection runner ──────────────────────────────────
+
+
+def run_detect_instances(
+    threshold: int = 10,
+    csv_out_path: Optional[str] = None,
+) -> InstanceDetectionReport:
+    """F3 entry point — detect ISM candidate groups and emit CSV + log.
+
+    Progress is 2-phase:
+        Phase A — "Gathering level actors..." (1 tick, cosmetic).
+                  ``get_all_level_actors()`` is cached upstream of the
+                  ScopedSlowTask so we know N before sizing the dialog;
+                  this tick exists as a UX marker only.
+        Phase B — "Detecting instance groups... (i/N)" (N ticks).
+
+    Args:
+        threshold: min group size to list as a candidate. Report always
+            holds every group regardless; threshold only filters the
+            ``candidate_groups`` property and therefore the CSV rows.
+        csv_out_path: override destination. Default:
+            ``{project_saved_dir}/CAD_Optimizer/instance_report_{ts}.csv``.
+
+    Returns:
+        InstanceDetectionReport — caller-usable directly (tests, F7).
+    """
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    # Gather up front so ScopedSlowTask can be sized. The Phase A tick
+    # below is a cosmetic acknowledgement of this already-done work.
+    actors = list(eas.get_all_level_actors())
+    n = len(actors)
+    total_work = 1 + n
+
+    was_cancelled = False
+    progress_counter = 0
+
+    with unreal.ScopedSlowTask(total_work, "F3: Instance Detection") as task:
+        task.make_dialog(True)
+        task.enter_progress_frame(1, "Gathering level actors...")
+
+        def _should_cancel() -> bool:
+            nonlocal was_cancelled
+            if task.should_cancel():
+                was_cancelled = True
+                return True
+            return False
+
+        def _on_progress() -> None:
+            nonlocal progress_counter
+            progress_counter += 1
+            task.enter_progress_frame(
+                1,
+                f"Detecting instance groups... ({progress_counter}/{n})",
+            )
+
+        report = detect_instance_groups(
+            actors=actors,
+            threshold=threshold,
+            should_cancel=_should_cancel,
+            on_progress=_on_progress,
+        )
+
+    csv_path = _write_instance_csv(report, csv_out_path)
+    _log_instance_summary(report, was_cancelled, csv_path)
+    return report
+
+
+def _write_instance_csv(
+    report: InstanceDetectionReport,
+    csv_out_path: Optional[str],
+) -> str:
+    """Emit CSV with 3-line comment header + candidate rows. Returns path."""
+    now = datetime.now()
+    if csv_out_path is None:
+        saved_dir = unreal.Paths.project_saved_dir()
+        out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+        os.makedirs(out_dir, exist_ok=True)
+        csv_out_path = os.path.join(
+            out_dir, f"instance_report_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+        )
+
+    with open(csv_out_path, "w", newline="", encoding="utf-8-sig") as f:
+        f.write("# GMTCK CAD Optimizer - F3 Instance Detection Report\n")
+        f.write(f"# Generated: {now.strftime(_DATETIME_FMT)}\n")
+        f.write(
+            f"# Threshold: {report.threshold} | "
+            f"Recommendation: ISM for Nanite-first rendering\n"
+        )
+        writer = csv.writer(f)
+        writer.writerow([
+            "rank",
+            "count",
+            "mesh_path",
+            "materials",
+            "mobility",
+            "estimated_drawcall_savings",
+            "sample_actor_labels",
+        ])
+        for rank, g in enumerate(report.candidate_groups, start=1):
+            writer.writerow([
+                rank,
+                g.count,
+                g.key.mesh_path,
+                ";".join(g.key.materials),
+                g.key.mobility_name,
+                (g.count - 1) * len(g.key.materials),
+                ";".join(g.get_labels(limit=3)),
+            ])
+
+    return csv_out_path
+
+
+def _log_instance_summary(
+    report: InstanceDetectionReport,
+    was_cancelled: bool,
+    csv_path: str,
+) -> None:
+    prefix = "[CANCELED — partial results] " if was_cancelled else ""
+    other = report.total_actors_scanned - report.static_mesh_actors
+    lines = [
+        f"{prefix}[CAD_Optimizer F3] Instance Detection Complete",
+        f"  Scanned: {report.total_actors_scanned} actors "
+        f"({report.static_mesh_actors} StaticMeshActor, {other} other)",
+        f"  Skipped: {report.skipped_no_mesh} no-mesh, "
+        f"{report.skipped_no_component} no-component, "
+        f"{report.skipped_non_static} non-static",
+        f"  Groups: {len(report.groups)} unique "
+        f"(threshold={report.threshold}, "
+        f"{len(report.candidate_groups)} candidates)",
+        f"  Est. drawcall reduction: "
+        f"{report.estimated_drawcall_reduction} (추정치)",
+    ]
+
+    top = report.candidate_groups[:10]
+    if top:
+        lines.append("  Top 10 candidates:")
+        for i, g in enumerate(top, start=1):
+            lines.append(
+                f"    #{i:<2} {g.count}x  {g.key.mesh_path} "
+                f"[{g.key.mobility_name}]"
+            )
+
+    lines.append(f"  Full CSV: {csv_path}")
+
+    for line in lines:
+        unreal.log(line)
+
+
+# ─── Widget helper plumbing (shared by F2) ──────────────────────────
 
 
 def _resolve_label(widget, name: str):
