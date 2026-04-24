@@ -1,64 +1,81 @@
-# Week 2 — F2 Mesh Statistics
+# Week 2 — F2 Mesh 통계 리포트
 
-> **기간**: 2026-04-24 ~ 2026-04-30 (진행 중)
+> **기간**: 2026-04-24 ~ 2026-04-24 (1일 완료)
 > **Phase**: 1 / Week 2 of 5
-> **상태**: 🟡 PR 진행 중 (`feature/f2-mesh-stats`)
+> **상태**: ✅ 완료
 
 ---
 
 ## 완료 Task
 
-| # | Task | 핵심 산출물 |
-|---|------|-----------|
-| 1 | F2 stats module (pure) | `cad_optimizer/stats.py` — `MeshStatsReport`, `collect_mesh_stats` |
-| 2 | EUW panel glue + ScopedSlowTask wiring | `cad_optimizer/ui/panel.py` — `run_scan_level(widget, skip_hidden)` |
-| 3 | Tools 메뉴에 "Scan Level" 엔트리 추가 | `cad_optimizer/ui/menu.py` — 2nd ToolMenuEntryScript subclass |
+| # | Task | 핵심 산출물 | Commit |
+|---|------|-----------|--------|
+| 1 | API 검증 (4라운드) | 7개 UE 5.5 API 확정, `api_verification_first.md` lesson 생성 | (검증 단계, commit 없음) |
+| 2 | CLAUDE.md v0.4 | §1 PCVR 타겟 명시, §5 deprecated subsystem 경고 | (산출물 2 PR) |
+| 3 | `stats.py` 구현 | `MeshStatsReport` dataclass + `collect_mesh_stats` pure function | `1e8b12e` |
+| 4 | `ui/panel.py` 구현 | `run_scan_level` + ScopedSlowTask + 콜백 주입 | `1e8b12e` |
+| 5 | `ui/menu.py` 수정 | Tools 메뉴 "Scan Level (Mesh Stats)" 엔트리 | `1e8b12e` |
+| 6 | EUW Blueprint 구성 | 버튼 + 체크박스 + 라벨 12개 + Branch wiring | (asset, commit 아님) |
+| 7 | Acceptance Criteria 검증 | 8/9 통과 + 1 실질 통과 | PR body 참조 |
 
 ---
 
-**Variation**: PR 본문에 1개 제안 (생략 여부는 병합 시점에 결정).
+**Variation**: Top 5 heaviest actors 제안됨 (PR body 참조). 이번 Week 미포함.
 
 ---
 
-## 학습한 핵심 개념 2개
+## 학습한 핵심 개념 3개
 
-### 1. Callback injection — 코어 모듈을 UI 프레임워크와 분리
-- `stats.collect_mesh_stats`는 `should_cancel`/`on_progress` 콜백만 받음. `SlowIter`/`ScopedSlowTask`/EUW 전부 모름.
-- 이점:
-  - **테스트 용이**: UE runtime 없이도 람다 2개 넘겨서 단위 테스트 가능 (Phase 2+ 고려).
-  - **재사용**: F7 리포트 생성이 stats 재실행 필요할 때 UI 없이 호출 가능.
-  - **F0 pattern 유지**: panel.py가 `ScopedSlowTask`를 직접 쓰고 콜백으로 브리지.
-- 비용: 호출 쪽이 두 줄 짜리 closure 작성. 허용 범위.
+### 1. API Verification First 원칙
+- AI (Claude, Gemini) 둘 다 UE API를 **추정으로 답한다**는 사실 직접 체감.
+- F2 설계 단계 API 검증 4라운드에서 **4개 중 3개가 틀림**:
+  - `EditorActorSubsystem()` 직접 생성 → deprecated since 5.2
+  - `smes.get_num_triangles` → 메서드 없음 (실제는 `sm.get_num_triangles(0)`)
+  - `sm.nanite_settings.enabled` → 속성 없음 (실제는 `get_editor_property('nanite_settings').enabled`)
+- 대응: `dir()`로 먼저 검증, `get_editor_subsystem()` 강제 사용, struct는 `get_editor_property` 후보.
+- 문서화: `docs/lessons_learned/api_verification_first.md`
 
-### 2. UE API isolation layer — deprecation 내성 확보
-- `stats.py`의 모든 `unreal.*` 호출은 파일 상단 `_get_*`/`_is_*` helper에 격리.
-  예: `_get_triangles(sm, lod=0)` → `sm.get_num_triangles(lod)` 한 줄.
-- UE 5.6+에서 API가 renamed/deprecated 되면 **이 블록 하나만** 수정하면 됨. `collect_mesh_stats` 본문은 변경 X.
-- CLAUDE.md §5 "deprecated API 사용 금지"를 구조적으로 강제하는 방법.
+### 2. Pure Function + Callback Injection 패턴
+- `stats.py`는 `unreal` 외 의존 금지 원칙.
+- 기존 `SlowIter` 객체 주입 대신 `should_cancel: Callable[[], bool]`, `on_progress: Callable[[], None]` 콜백 2개로 분리.
+- 효과:
+  - 로직 단위 테스트 가능 (더미 `lambda: False`, `lambda: None` 주입)
+  - 순수성 유지 (stats는 SlowIter/ScopedSlowTask 모름)
+  - `ui/panel.py`가 ScopedSlowTask 직접 사용 + lambda 2개로 주입
+- Gemini Pro 피드백 직접 반영 사례.
+
+### 3. Blueprint → Python 값 전달 (Execute Python Command 한계)
+- `Execute Python Command` 노드는 **문자열만 실행**. Blueprint 변수 자동 binding 없음.
+- 해결: `Is Checked` (bool) → `Select` (True/False 문자열) → `Format Text` (스크립트 조립) → `Execute Python Command`.
+- 핑크 Text→String 자동 변환 노드는 정상 (손대면 X).
+- 대안 Branch 구조도 가능 (2개의 고정 문자열 Python Command).
 
 ---
 
 ## 막혔던 점 + 해결
 
-| 문제 | 해결 |
-|------|------|
-| `.uasset` (EUW_MainPanel)은 Python 스크립트로 편집 불가 — Blueprint 편집기 수동 조작 필수 | PR 본문에 단계별 Blueprint 편집 가이드 포함. 병합 전 수동 체크리스트 통과 필요. |
-| Acceptance criteria 9개 중 실행 검증은 에디터 내부에서만 가능 (Claude Code는 에디터 구동 X) | PR 본문에 verification procedure 명시. Philip이 테스트 후 본문 체크. |
-| `stats.py`에서 `SlowIter` 직접 쓰면 "순수 모듈" 제약 위배. SlowIter는 iterable이라 should_cancel/advance 분리 노출 안 됨 | panel.py에서 `ScopedSlowTask` 직접 사용 + lambda 2개로 stats에 주입. SlowIter는 refactor 없이 유지. |
+| 문제 | 증상 | 해결 |
+|------|------|------|
+| Subsystem 직접 생성 deprecated 경고 | `DeprecationWarning: Creating an instance of an Editor subsystem has been deprecated since UE 5.2` | `unreal.get_editor_subsystem(unreal.XxxSubsystem)` 로 교체. CLAUDE.md §5 + lesson learned 추가 |
+| `StaticMeshEditorSubsystem.get_num_triangles` 존재 X | `AttributeError` | `sm.get_num_triangles(0)` (instance method)로 이동 확인 via `dir()` |
+| Nanite 속성 접근 경로 | `AttributeError: 'StaticMesh' has no attribute 'nanite_settings'` | `sm.get_editor_property('nanite_settings').enabled` 사용 |
+| `EditorActorSubsystem.duplicate_actor` 파라미터 오류 | `Cannot nativize 'Vector' as 'ToWorld'` | `spawn_actor_from_object(sm, loc)` 사용으로 전환. 2차 lesson learned 추가 (아래) |
+| Blueprint 체크박스 값 Python에 전달 안 됨 | EUW 버튼 사용 시 `skip_hidden` 값 무시됨 | Branch + Select + Format Text로 문자열 동적 조립 |
 
 ---
 
 ## Week 3 진입 시 주의
 
-1. **F3는 쓰기 작업** → `BatchIter` 사용 + 각 batch를 `unreal.ScopedEditorTransaction`으로 감싸기.
-2. **Instance detection hash 함수**는 geometry 기반 (vertex/triangle) — stats.py 재활용 어려움. 별도 `utils/mesh_hashing.py` 필요.
-3. **ISM/HISM 변환**은 undo-able 해야 함 → transaction 경계 = batch 경계 (F0 BatchIter 설계 원칙 유효).
-4. **Dry-run 모드**: F3부터 적용 (실제 변환 안 하고 "몇 개 그룹, 몇 개 감소 예상"만 리포트).
+1. **F3 Instance Detection 킥오프 준비됨**: 10,070 / 21 unique meshes 데이터가 구체적 ROI 근거.
+2. **`spawn_actor_from_object` 재검증 이미 완료**: 합성 대량 레벨 필요 시 그대로 사용 가능.
+3. **CLAUDE.md §5 deprecated 경고 추가됨**: 새 API 사용 전 반드시 `dir()` 검증.
+4. **Pure function + callback injection 패턴**: F3 구현 시에도 동일하게 유지. `collect_mesh_stats` 재사용 가능성 높음 (grouping by mesh path).
 
 ---
 
 ## 다음 세션 시작 시 (CLAUDE.md §9)
 
 - 이 문서 + CLAUDE.md 첨부
-- 현재: Week 2 PR 리뷰/병합 단계 또는 Week 3 시작
-- Week 3 목표: F3 instance detection (mesh hashing → ISM/HISM 변환, dry-run)
+- 현재: Phase 1 Week 3 진입
+- 목표: F3 Instance Detection (중복 StaticMeshActor 찾기 → ISM 변환 제안)
+- 예상 첫 task: "같은 StaticMesh를 참조하는 actor 그룹핑 로직 설계"
