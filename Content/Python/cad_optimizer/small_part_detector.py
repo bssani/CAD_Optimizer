@@ -8,10 +8,14 @@ injected via callbacks (same pattern as F2 ``stats.py`` and F3
 ``instance_detector.py``).
 
 Notes:
-    - InstancedStaticMeshActor (ISMA) is intentionally skipped. ISMA
-      bbox represents the entire instance cluster, not individual
-      instances — not aligned with F4 intent. Phase 2 will handle
-      ISMA per-instance.
+    - "ISMA-like" actors — those whose root component is an
+      ``InstancedStaticMeshComponent`` (or its HISMC subclass) — are
+      intentionally skipped via ``skipped_isma``. Their bbox spans the
+      entire instance cluster rather than a single instance, which
+      breaks the F4 size assumption. Phase 2 will handle per-instance.
+      (Note: we detect by component type, not actor class, because
+      ``unreal.InstancedStaticMeshActor`` is not exposed in the UE 5.5
+      Python module — see lessons_learned/api_verification_first.md.)
     - Disjoint meshes (e.g. left/right symmetric parts merged into a
       single mesh asset) are NOT split here. F4 reports the full bbox
       of such meshes, which can produce false negatives — see Phase 2
@@ -117,8 +121,25 @@ class SmallPartDetectionReport:
 # Future UE version bumps (5.6+) touch only this block.
 
 
-def _is_isma(actor) -> bool:
-    return isinstance(actor, unreal.InstancedStaticMeshActor)
+# Resolved at import time. ``unreal.InstancedStaticMeshActor`` is NOT in
+# UE 5.5's Python module, so we detect ISMA-like actors via their root
+# component instead. ``InstancedStaticMeshComponent`` is exposed and has
+# been since UE 4.x; HISMC is a subclass so isinstance covers both.
+_ISMC_CLASS = getattr(unreal, "InstancedStaticMeshComponent", None)
+
+
+def _is_isma_like(actor) -> bool:
+    """True if actor's root component is ISMC/HISMC.
+
+    Bbox of such an actor spans the cluster, not a single instance,
+    so F4 must skip it.
+    """
+    if _ISMC_CLASS is None:
+        return False
+    rc = actor.root_component
+    if rc is None:
+        return False
+    return isinstance(rc, _ISMC_CLASS)
 
 
 def _is_static_mesh_actor(actor) -> bool:
@@ -210,10 +231,11 @@ def detect_small_parts(
 
         total += 1
 
-        # ISMA first — separate UClass, isinstance(...StaticMeshActor) is
-        # already false for it but the explicit branch keeps the count
-        # honest and the intent visible.
-        if _is_isma(actor):
+        # ISMA-like first — actor whose root is ISMC/HISMC. Its bbox
+        # spans the entire instance cluster, not a single instance, so
+        # we drop it from F4's per-actor size triage and surface it
+        # via the dedicated counter.
+        if _is_isma_like(actor):
             isma_count += 1
             on_progress()
             continue
