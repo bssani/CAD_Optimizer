@@ -30,6 +30,36 @@ class CADOptimizerDetectInstancesCommand(unreal.ToolMenuEntryScript):
         run_detect_instances()
 
 
+@unreal.uclass()
+class CADOptimizerDetectSmallPartsTinyCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.small_part_detector import PRESETS
+        from cad_optimizer.ui.panel import run_detect_small_parts
+
+        run_detect_small_parts(threshold_cm=PRESETS["Tiny"])
+
+
+@unreal.uclass()
+class CADOptimizerDetectSmallPartsSmallCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.small_part_detector import PRESETS
+        from cad_optimizer.ui.panel import run_detect_small_parts
+
+        run_detect_small_parts(threshold_cm=PRESETS["Small"])
+
+
+@unreal.uclass()
+class CADOptimizerDetectSmallPartsMediumCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.small_part_detector import PRESETS
+        from cad_optimizer.ui.panel import run_detect_small_parts
+
+        run_detect_small_parts(threshold_cm=PRESETS["Medium"])
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -62,6 +92,24 @@ def register_menu() -> None:
         label="Detect Instances (F3)",
         tool_tip="F3: group StaticMeshActors by (mesh, materials, mobility); "
                  "emits CSV report + top-10 Output Log summary. Level unchanged.",
+    )
+    _register(
+        CADOptimizerDetectSmallPartsTinyCommand(),
+        name="CADOptimizer.DetectSmallParts.Tiny",
+        label="Detect Small Parts (F4) — Tiny (< 0.5 cm)",
+        tool_tip="F4: report bbox-diagonal < 0.5 cm. Detection-only.",
+    )
+    _register(
+        CADOptimizerDetectSmallPartsSmallCommand(),
+        name="CADOptimizer.DetectSmallParts.Small",
+        label="Detect Small Parts (F4) — Small (< 1.0 cm)",
+        tool_tip="F4: report bbox-diagonal < 1.0 cm. Detection-only.",
+    )
+    _register(
+        CADOptimizerDetectSmallPartsMediumCommand(),
+        name="CADOptimizer.DetectSmallParts.Medium",
+        label="Detect Small Parts (F4) — Medium (< 5.0 cm)",
+        tool_tip="F4: report bbox-diagonal < 5.0 cm. Detection-only.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
