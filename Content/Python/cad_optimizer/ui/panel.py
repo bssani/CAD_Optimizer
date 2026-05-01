@@ -443,10 +443,17 @@ def _write_small_parts_csv(
     report: SmallPartDetectionReport,
     csv_out_path: Optional[str],
 ) -> str:
-    """Emit CSV with 4-line comment header + raw measurement rows."""
+    """Emit CSV with 4-line comment header + raw measurement rows.
+
+    Returned path is absolute and forward-slash normalized for Output
+    Log readability; the actual file write goes to the same location
+    Windows would resolve either way.
+    """
     now = datetime.now()
     if csv_out_path is None:
-        saved_dir = unreal.Paths.project_saved_dir()
+        saved_dir = unreal.Paths.convert_relative_path_to_full(
+            unreal.Paths.project_saved_dir()
+        )
         out_dir = os.path.join(saved_dir, "CAD_Optimizer")
         os.makedirs(out_dir, exist_ok=True)
         csv_out_path = os.path.join(
@@ -498,7 +505,7 @@ def _write_small_parts_csv(
                 report.is_small(m),
             ])
 
-    return csv_out_path
+    return csv_out_path.replace("\\", "/")
 
 
 def _format_simulation_table(
