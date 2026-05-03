@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 > AI (Claude)와 협업할 때 매 세션 시작 시 참조하는 프로젝트 컨텍스트 파일.
-> **버전**: v0.6 (2026-04-24, Week 3 F3 완료 반영)
+> **버전**: v0.7 (2026-05-04, Week 4 완료 반영)
 
 ---
 
@@ -83,14 +83,14 @@
 
 ## 7. Phase 현황
 
-**현재**: Phase 1 Week 4 진입 (Week 3 완료: 2026-04-24)
+**현재**: Phase 1 Week 5 진입 직전 (Week 4 완료: 2026-05-04)
 
 **Phase 1 기능 (Week별)**:
 - Week 1: **F0 (infrastructure)** + F1 (plugin 골격) ✅
 - Week 2: F2 (mesh 통계) ✅
 - Week 3: F3 (instance detection) ✅
-- Week 4: F4 (small part culling) + F5 (naming filter) ← **현재**
-- Week 5: F6 (material consolidation) + F7 (리포트) + **F8 (metadata tagging)**
+- Week 4: F4 (small part culling) + F5 (NX naming classification) ✅
+- Week 5: F6 (material consolidation) + F7 (리포트) + **F8 (metadata tagging)** ← 다음
 
 **Out of scope (Phase 1)**:
 - Mesh decimation
@@ -110,6 +110,8 @@
 | 의사결정 기록 | `docs/decisions/ADR_*.md` |
 | 실패/함정 | `docs/lessons_learned/*.md` |
 | 학습 노트 (필립 작성) | `docs/concepts/*.md` |
+| 실차 측정 박제 | `docs/measurements/*.md` |
+| Phase 2 backlog | `docs/phase2_backlog.md` |
 | Plugin 소스 | `Content/Python/cad_optimizer/` + `Content/EditorWidgets/` |
 
 ## 9. 세션 시작 시 권장 절차
@@ -148,7 +150,17 @@ Claude와 새 대화 시작할 때:
 - **2026-04-23 (v0.4)**: §1에 타겟 범위 명시 — PCVR 전용, decimation/LOD는 Phase W 별도 트랙
 - **2026-04-24 (v0.5)**: Week 2 발견 사항 반영 — subsystem 생성 규칙, AI API 검증 원칙 §5 편입
 - **2026-04-24 (v0.6)**: Week 3 완료 반영 — §7 상태 업데이트
+- **2026-05-04 (v0.7)**: Week 4 완료 반영
+  - §7 상태 업데이트 (Week 4 ✅, Week 5 진입 직전)
+  - §8에 신규 산출물 reference 추가: `docs/measurements/`, `docs/phase2_backlog.md`
+  - 신규 박제: `docs/measurements/f4_c1yc_2_mcm.md` (실차 첫 측정),
+    `docs/concepts/nx_naming_patterns.md` (V2 regex 박제),
+    `docs/phase2_backlog.md` (Phase 2 입력 문서)
+  - F4 Datasmith hierarchy 발견 — leaf actor_label 99%+ Geometry*, attach
+    parent에서 부품명 식별 (실차 검증으로 확정)
+  - F5 분리 원칙 — 측정 (`small_part_detector.py`)과 분류 (`nx_naming.py`)
+    모듈 분리, panel이 결합. 향후 F-pattern으로 재사용 가능.
 
 ---
 
-*마지막 업데이트: 2026-04-24*
+*마지막 업데이트: 2026-05-04*
