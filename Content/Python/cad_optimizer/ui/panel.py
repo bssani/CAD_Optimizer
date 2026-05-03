@@ -73,6 +73,12 @@ from cad_optimizer.instance_detector import (
     InstanceDetectionReport,
     detect_instance_groups,
 )
+from cad_optimizer.nx_naming import (
+    NX_CATEGORY_ORDER,
+    UNCATEGORIZED,
+    category_counts,
+    classify_measurements,
+)
 from cad_optimizer.small_part_detector import (
     PRESETS,
     SIMULATION_THRESHOLDS_CM,
@@ -426,8 +432,12 @@ def run_detect_small_parts(
             on_progress=_on_progress,
         )
 
-    csv_path = _write_small_parts_csv(report, csv_out_path)
-    _log_small_parts_summary(report, was_cancelled, csv_path)
+    # F5: classify each measurement's parent_part_label.
+    # Parallel list — same length & order as report.measurements.
+    categories = classify_measurements(report.measurements)
+
+    csv_path = _write_small_parts_csv(report, categories, csv_out_path)
+    _log_small_parts_summary(report, categories, was_cancelled, csv_path)
     return report
 
 
@@ -441,9 +451,14 @@ def _preset_name_for(threshold_cm: float) -> Optional[str]:
 
 def _write_small_parts_csv(
     report: SmallPartDetectionReport,
+    categories: List[str],
     csv_out_path: Optional[str],
 ) -> str:
-    """Emit CSV with 4-line comment header + raw measurement rows.
+    """Emit CSV with comment header + raw measurement rows + nx_category.
+
+    ``categories`` is a parallel list to ``report.measurements`` (same
+    length, same order). Caller is responsible for that invariant —
+    F5 ``classify_measurements`` produces it.
 
     Returned path is absolute and forward-slash normalized for Output
     Log readability; the actual file write goes to the same location
@@ -481,11 +496,16 @@ def _write_small_parts_csv(
             "# parent_chain_path uses noise-filtered attach chain. "
             "is_multi_leaf flags parts split across N leaves.\n"
         )
+        f.write(
+            "# nx_category: NX naming classification (V2 patterns from "
+            "docs/concepts/nx_naming_patterns.md).\n"
+        )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
             "actor_label",
-            "parent_part_label",     # NEW — 사용자 가독성 핵심
+            "parent_part_label",     # 사용자 가독성 핵심
+            "nx_category",           # F5 — 박제: docs/concepts/nx_naming_patterns.md
             "folder_path",
             "mesh_path",
             "bbox_x_cm",
@@ -496,15 +516,18 @@ def _write_small_parts_csv(
             "bbox_volume_cm3",
             "mobility",
             "is_small",
-            "parent_leaf_count",     # NEW
-            "is_multi_leaf",         # NEW
-            "parent_chain_path",     # NEW — longest column → 마지막
+            "parent_leaf_count",
+            "is_multi_leaf",
+            "parent_chain_path",     # longest column → 마지막
         ])
-        for rank, m in enumerate(report.measurements, start=1):
+        for rank, (m, cat) in enumerate(
+            zip(report.measurements, categories), start=1
+        ):
             writer.writerow([
                 rank,
                 m.get_label(),
                 m.parent_part_label,
+                cat,
                 m.folder_path,
                 m.mesh_path,
                 f"{m.bbox_x_cm:.3f}",
@@ -573,8 +596,32 @@ def _format_parent_for_log(m, max_label_len: int = 50) -> str:
     return f"parent: <root>  actor: {m.get_label()}"
 
 
+def _format_category_block(
+    counts: "OrderedDict[str, int]",
+    total: int,
+) -> List[str]:
+    """8 categories + UNCATEGORIZED, fixed-width columns. Uses
+    NX_CATEGORY_ORDER so category rows stay in canonical order even
+    if some categories have count 0.
+    """
+    lines = [
+        f"  NX category distribution ({total:,} measured):",
+    ]
+    for cat in NX_CATEGORY_ORDER:
+        cnt = counts[cat]
+        pct = (cnt / total * 100.0) if total else 0.0
+        lines.append(
+            f"    {cat:<14s} : {cnt:>6,} ({pct:>4.1f}%)"
+        )
+    lines.append(
+        "  See docs/concepts/nx_naming_patterns.md for derivation."
+    )
+    return lines
+
+
 def _log_small_parts_summary(
     report: SmallPartDetectionReport,
+    categories: List[str],
     was_cancelled: bool,
     csv_path: str,
 ) -> None:
@@ -635,6 +682,11 @@ def _log_small_parts_summary(
             )
     else:
         lines.append("    (no measurements)")
+
+    # F5: NX category distribution
+    lines.append("")
+    counts = category_counts(categories)
+    lines.extend(_format_category_block(counts, len(report.measurements)))
 
     lines.append("")
     lines.append(_DISJOINT_WARNING)
