@@ -78,3 +78,13 @@ Slot mismatches: 0
 - Week 3 log: `docs/weekly_log/week03.md`
 - CLAUDE.md §4 "Phase별 접근" — Phase 1 = core recipes + infra, 수치는 Phase 1 exit 시점에 실 CAD로 확정.
 - (Phase 2 진입 시) 이 lesson을 CLAUDE.md §5 "절대 하지 말 것"에 편입할지 재검토.
+
+---
+
+## 사후 검증 기록
+
+- **2026-05-04**: F4 (small part detection)이 실 GM CAD 1대(C1YC_2_MCM,
+  107,882 actors)에서 처음 측정 완료. 본 lesson의 Phase 1 exit criteria
+  "실 CAD 1건 이상 측정 완료" 첫 충족 시점. 결과는 long-tail 정상 분포로,
+  CarConfigurator 샘플의 single-bucket 분포(P10=P50=P90=141.4cm)와
+  정성적으로 다름을 confirm. 상세: `docs/measurements/f4_c1yc_2_mcm.md`
