@@ -62,11 +62,15 @@ F4 측정으로 사후 confirm됨:
 
 Output Log 표시 기준 (diagonal은 2-decimal 반올림). 정확한 mm-단위 수치는 CSV(8번 항목) 참조.
 
+> **2026-05-04 patch**: #3 multi 컬럼 "2" → "1" 정정. CSV 원본의
+> `parent_leaf_count=1` / `is_multi_leaf=FALSE` 확인 결과 반영. 이전
+> 박제는 Output Log 표시를 그대로 옮긴 cosmetic 오류.
+
 | Rank | Diagonal | Parent (immediate attach parent label) | Mobility | parent_leaf_count |
 |------|----------|----------------------------------------|----------|-------------------|
 | 1 | 0.00 cm | `12696637_008-VALVE_ASM-O_PMP_FLOW_CONT_SOL_600913` | STATIC | 2 |
 | 2 | 0.00 cm | `12696637_008-VALVE_ASM-O_PMP_FLOW_CONT_SOL_600254` | STATIC | 2 |
-| 3 | 0.00 cm | `84815023_001-_LATCH_ASM-R_SEAT_27798932391` | STATIC | 2 |
+| 3 | 0.00 cm | `84815023_001-_LATCH_ASM-R_SEAT_27798932391` | STATIC | 1 |
 | 4 | 0.00 cm | `84815023_001-_LATCH_ASM-R_SEAT_277989` | STATIC | 1 |
 | 5 | 0.00 cm | `84815022_001-_LATCH_ASM-R_SEAT_17196633991` | STATIC | 1 |
 | 6 | 0.00 cm | `84815022_001-_LATCH_ASM-R_SEAT_171966` | STATIC | 1 |
@@ -75,7 +79,7 @@ Output Log 표시 기준 (diagonal은 2-decimal 반올림). 정확한 mm-단위 
 | 9 | 0.00 cm | `BRU57682_009-SHUTTER_-FRT_BPR_1975275` | STATIC | 1 |
 | 10 | 0.00 cm | `BRU57682_009-SHUTTER_-FRT_BPR_1975274` | STATIC | 1 |
 
-**Smallest 10 multi-leaf 비율: 3/10 (30%).** 전체 평균 9.4%(이전 hierarchy 분석)보다
+**Smallest 10 multi-leaf 비율: 2/10 (20%).** 전체 평균 9.4%(이전 hierarchy 분석)보다
 높음 — "smallest 부품일수록 multi-leaf 비율 높을 수 있다"는 가설 신호. 다음 차량
 측정 시 이 비율이 비슷하게 나오는지가 가설 강화/약화 신호.
 
