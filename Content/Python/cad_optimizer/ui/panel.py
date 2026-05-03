@@ -471,13 +471,21 @@ def _write_small_parts_csv(
         )
         f.write(preset_line)
         f.write(
-            "# Note: bbox is world-space (scale-applied). UE unit = cm. "
-            "ISMA actors are excluded.\n"
+            "# Note: bbox is world-space (scale-applied). UE unit = cm.\n"
+        )
+        f.write(
+            "# Datasmith hierarchy: parent_part_label = real part name "
+            "(leaf actor_label is usually \"Geometry*\").\n"
+        )
+        f.write(
+            "# parent_chain_path uses noise-filtered attach chain. "
+            "is_multi_leaf flags parts split across N leaves.\n"
         )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
             "actor_label",
+            "parent_part_label",     # NEW — 사용자 가독성 핵심
             "folder_path",
             "mesh_path",
             "bbox_x_cm",
@@ -488,11 +496,15 @@ def _write_small_parts_csv(
             "bbox_volume_cm3",
             "mobility",
             "is_small",
+            "parent_leaf_count",     # NEW
+            "is_multi_leaf",         # NEW
+            "parent_chain_path",     # NEW — longest column → 마지막
         ])
         for rank, m in enumerate(report.measurements, start=1):
             writer.writerow([
                 rank,
                 m.get_label(),
+                m.parent_part_label,
                 m.folder_path,
                 m.mesh_path,
                 f"{m.bbox_x_cm:.3f}",
@@ -503,6 +515,9 @@ def _write_small_parts_csv(
                 f"{m.bbox_volume_cm3:.3f}",
                 m.mobility_name,
                 report.is_small(m),
+                m.parent_leaf_count,
+                m.is_multi_leaf,
+                m.parent_chain_path,
             ])
 
     return csv_out_path.replace("\\", "/")
@@ -543,6 +558,21 @@ _DISJOINT_WARNING = (
 )
 
 
+def _format_parent_for_log(m, max_label_len: int = 50) -> str:
+    """Format the parent identification segment of a smallest-10 row.
+
+    Returns either:
+        ``parent: <truncated_label>``           — when parent_part_label set
+        ``parent: <root>  actor: <leaf_label>`` — when no attach parent
+    """
+    if m.parent_part_label:
+        label = m.parent_part_label
+        if len(label) > max_label_len:
+            label = label[: max_label_len - 3] + "..."
+        return f"parent: {label}"
+    return f"parent: <root>  actor: {m.get_label()}"
+
+
 def _log_small_parts_summary(
     report: SmallPartDetectionReport,
     was_cancelled: bool,
@@ -550,11 +580,7 @@ def _log_small_parts_summary(
 ) -> None:
     prefix = "[CANCELED — partial results] " if was_cancelled else ""
 
-    other = (
-        report.total_actors_scanned
-        - report.static_mesh_actors
-        - report.skipped_isma
-    )
+    other = report.total_actors_scanned - report.static_mesh_actors
     measured = len(report.measurements)
     small_count = len(report.small_parts)
     pct = (small_count / measured * 100.0) if measured else 0.0
@@ -564,12 +590,12 @@ def _log_small_parts_summary(
     lines = [
         f"{prefix}[CAD_Optimizer F4] Small Part Detection Complete",
         f"  Scanned: {report.total_actors_scanned} actors "
-        f"({report.static_mesh_actors} StaticMeshActor, "
-        f"{report.skipped_isma} ISMA, {other} other)",
-        f"  Skipped: {report.skipped_isma} ISMA, "
-        f"{report.skipped_no_root} no-root, "
+        f"({report.static_mesh_actors} StaticMeshActor, {other} other)",
+        f"  Skipped: {report.skipped_no_root} no-root, "
         f"{report.skipped_no_mesh} no-mesh, "
         f"{report.skipped_zero_bbox} zero-bbox",
+        f"  Root-level (no attach parent, measured): "
+        f"{report.skipped_no_attach_parent}",
         f"  Measured: {measured} actors",
         f"  Threshold: {report.threshold_cm:.2f} cm (diagonal){preset_str}",
         f"  Small parts: {small_count} / {measured} ({pct:.1f}%)",
@@ -599,11 +625,13 @@ def _log_small_parts_summary(
     smallest = report.measurements[:10]
     if smallest:
         for i, m in enumerate(smallest, start=1):
-            folder = m.folder_path or "<root>"
+            multi_tag = (
+                f"  multi={m.parent_leaf_count}" if m.is_multi_leaf else ""
+            )
             lines.append(
                 f"    #{i:<2} {m.bbox_diagonal_cm:>6.2f}cm  "
-                f"{m.get_label():<20s}  [{m.mobility_name}]  "
-                f"{folder}  {m.mesh_path}"
+                f"{_format_parent_for_log(m):<55s}  "
+                f"[{m.mobility_name}]{multi_tag}"
             )
     else:
         lines.append("    (no measurements)")
