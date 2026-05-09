@@ -73,6 +73,12 @@ from cad_optimizer.instance_detector import (
     InstanceDetectionReport,
     detect_instance_groups,
 )
+from cad_optimizer.material_inventory import (
+    MATERIAL_CATEGORY_ORDER,
+    MaterialInventoryReport,
+    build_inventory,
+)
+from cad_optimizer.material_inventory import category_counts as material_category_counts
 from cad_optimizer.nx_naming import (
     NX_CATEGORY_ORDER,
     UNCATEGORIZED,
@@ -500,6 +506,11 @@ def _write_small_parts_csv(
             "# nx_category: NX naming classification (V2 patterns from "
             "docs/concepts/nx_naming_patterns.md).\n"
         )
+        f.write(
+            "# material_count: smc.get_material() override count. "
+            "override_status: no_override actors fall back to mesh default "
+            "(typical for Datasmith CAD).\n"
+        )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
@@ -518,6 +529,9 @@ def _write_small_parts_csv(
             "is_small",
             "parent_leaf_count",
             "is_multi_leaf",
+            "material_count",        # F6 — 박제: docs/concepts/material_analysis_c1yc_2_mcm.md
+            "override_status",       # F6
+            "material_path_top1",    # F6
             "parent_chain_path",     # longest column → 마지막
         ])
         for rank, (m, cat) in enumerate(
@@ -540,6 +554,9 @@ def _write_small_parts_csv(
                 report.is_small(m),
                 m.parent_leaf_count,
                 m.is_multi_leaf,
+                m.material_count,
+                m.override_status,
+                m.material_path_top1,
                 m.parent_chain_path,
             ])
 
@@ -688,12 +705,188 @@ def _log_small_parts_summary(
     counts = category_counts(categories)
     lines.extend(_format_category_block(counts, len(report.measurements)))
 
+    # F6: Material override status anchor
+    lines.append("")
+    lines.extend(_format_override_status_block(report.measurements))
+
     lines.append("")
     lines.append(_DISJOINT_WARNING)
     lines.append("")
     lines.append("  💡 다른 threshold로 다시 돌리기:")
     lines.append("     run_detect_small_parts(threshold_cm=2.0)")
     lines.append("     또는 EUW에서 Custom 입력 후 Run")
+    lines.append(f"  Full CSV: {csv_path}")
+
+    for line in lines:
+        unreal.log(line)
+
+
+# ─── F6: Material override status (F4 log anchor) + inventory runner ──
+
+
+def _format_override_status_block(measurements) -> List[str]:
+    """Material override status — 2 카운트 + anchor 라인.
+
+    "no_override" 비율은 Datasmith CAD에서 흔한 정상 fallback 상태이므로
+    경고 X. anchor 텍스트로 박제 reference 노출 (사용자가 추후
+    "왜 절반이 no_override?" 질문 자체 답변 가능).
+    """
+    no_count = sum(
+        1 for m in measurements if m.override_status == "no_override"
+    )
+    has_count = len(measurements) - no_count
+    total = len(measurements)
+    no_pct = (no_count / total * 100.0) if total else 0.0
+    has_pct = (has_count / total * 100.0) if total else 0.0
+    return [
+        "  Material override status:",
+        f"    no_override : {no_count:>6,} ({no_pct:>4.1f}%) "
+        f"← mesh default fallback (typical for Datasmith CAD)",
+        f"    has_override: {has_count:>6,} ({has_pct:>4.1f}%)",
+        "  See docs/concepts/material_analysis_c1yc_2_mcm.md for details.",
+    ]
+
+
+def run_material_inventory(
+    csv_out_path: Optional[str] = None,
+) -> None:
+    """F6 entry point — full material asset inventory.
+
+    Walks all StaticMeshActors, builds per-material usage counts,
+    writes inventory CSV + Output Log summary.
+    """
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    actors = list(eas.get_all_level_actors())
+    if not actors:
+        unreal.log_warning("[CAD_Optimizer F6] Empty level — nothing to inventory.")
+        return
+
+    cancelled = [False]
+
+    with unreal.ScopedSlowTask(len(actors), "F6: Building material inventory...") as task:
+        task.make_dialog(True)
+
+        def _should_cancel() -> bool:
+            if task.should_cancel():
+                cancelled[0] = True
+                return True
+            return False
+
+        def _on_progress() -> None:
+            task.enter_progress_frame(1)
+
+        report = build_inventory(
+            actors,
+            should_cancel=_should_cancel,
+            on_progress=_on_progress,
+        )
+
+    csv_path = _write_inventory_csv(report, csv_out_path)
+    _log_inventory_summary(report, cancelled[0], csv_path)
+
+
+def _write_inventory_csv(
+    report: MaterialInventoryReport,
+    csv_out_path: Optional[str],
+) -> str:
+    """Write material asset inventory CSV — one row per unique material."""
+    now = datetime.now()
+    if csv_out_path is None:
+        saved_dir = unreal.Paths.convert_relative_path_to_full(
+            unreal.Paths.project_saved_dir()
+        )
+        out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+        os.makedirs(out_dir, exist_ok=True)
+        csv_out_path = os.path.join(
+            out_dir, f"material_inventory_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+        )
+
+    with open(csv_out_path, "w", newline="", encoding="utf-8-sig") as f:
+        f.write(f"# Generated: {now.strftime(_DATETIME_FMT)}\n")
+        f.write(f"# Level actors scanned: {report.total_actors_scanned}\n")
+        f.write(f"# StaticMeshActor count: {report.sma_count}\n")
+        f.write(f"# Total unique materials: {report.total_unique_materials}\n")
+        f.write("# usage_via_override = counted from smc.get_material(i)\n")
+        f.write(
+            "# usage_via_default = counted when actor has no override "
+            "(mesh default fallback)\n"
+        )
+
+        writer = csv.writer(f)
+        writer.writerow([
+            "rank",
+            "material_path",
+            "usage_via_override",
+            "usage_via_default",
+            "total_usage",
+            "category",
+            "is_instance",
+            "is_base",
+        ])
+        for rank, a in enumerate(report.assets, start=1):
+            writer.writerow([
+                rank,
+                a.material_path,
+                a.usage_via_override,
+                a.usage_via_default,
+                a.total_usage,
+                a.category,
+                a.is_instance,
+                a.is_base,
+            ])
+
+    return csv_out_path.replace("\\", "/")
+
+
+def _log_inventory_summary(
+    report: MaterialInventoryReport,
+    was_cancelled: bool,
+    csv_path: str,
+) -> None:
+    prefix = "[CANCELED — partial results] " if was_cancelled else ""
+    other = report.total_actors_scanned - report.sma_count
+    sma_safe = report.sma_count if report.sma_count else 1
+    no_pct = report.no_override_count / sma_safe * 100.0
+    has_pct = report.has_override_count / sma_safe * 100.0
+
+    lines = [
+        f"{prefix}[CAD_Optimizer F6] Material Inventory Complete",
+        f"  Scanned: {report.total_actors_scanned:,} actors "
+        f"({report.sma_count:,} StaticMeshActor, {other:,} other)",
+        f"  Skipped: {report.skipped_no_smc} no-smc, "
+        f"{report.skipped_no_sm} no-mesh",
+        f"  Override status: "
+        f"{report.no_override_count:,} no_override ({no_pct:.1f}%), "
+        f"{report.has_override_count:,} has_override ({has_pct:.1f}%)",
+        f"  Total unique materials: {report.total_unique_materials}",
+        "",
+    ]
+
+    # Top 10 materials
+    lines.append("  Top 10 materials by total_usage:")
+    top = report.assets[:10]
+    if top:
+        for rank, a in enumerate(top, start=1):
+            instance_tag = "MI" if a.is_instance else "M " if a.is_base else "??"
+            lines.append(
+                f"    #{rank:<2}  {a.total_usage:>6,} uses  "
+                f"[{a.category:<10}] [{instance_tag}]  {a.material_path}"
+            )
+    else:
+        lines.append("    (no materials found)")
+
+    lines.append("")
+
+    # Category distribution
+    counts = material_category_counts(report.assets)
+    total_assets = report.total_unique_materials if report.total_unique_materials else 1
+    lines.append("  Material category distribution (unique assets):")
+    for cat in MATERIAL_CATEGORY_ORDER:
+        cnt = counts[cat]
+        pct = (cnt / total_assets * 100.0) if report.total_unique_materials else 0.0
+        lines.append(f"    {cat:<10} : {cnt:>4,} ({pct:>4.1f}%)")
+    lines.append("  See docs/concepts/material_analysis_c1yc_2_mcm.md for analysis.")
+    lines.append("")
     lines.append(f"  Full CSV: {csv_path}")
 
     for line in lines:

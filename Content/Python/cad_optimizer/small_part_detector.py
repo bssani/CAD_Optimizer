@@ -35,6 +35,11 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import unreal
 
+from cad_optimizer.material_inventory import (
+    NO_OVERRIDE,
+    measure_actor_material_status,
+)
+
 
 # Threshold presets (cm). 사용자가 직접 수정 가능.
 PRESETS: Dict[str, float] = {
@@ -83,6 +88,10 @@ class SmallPartMeasurement:
     parent_chain_path: str = ""        # filtered chain "root > ... > immediate_parent"
     parent_leaf_count: int = 0         # set in pass 2
     is_multi_leaf: bool = False        # set in pass 2
+    # NEW (F6 — material status, 박제: docs/concepts/material_analysis_c1yc_2_mcm.md)
+    material_count: int = 0            # smc.get_material(i) override count
+    override_status: str = NO_OVERRIDE  # NO_OVERRIDE | HAS_OVERRIDE
+    material_path_top1: str = ""       # primary material (override or mesh default)
 
     def get_label(self) -> str:
         """Lazy label resolution (F3 lesson — avoid editor round-trip
@@ -336,6 +345,9 @@ def detect_small_parts(
 
         leaf_to_parent[actor] = parent_actor  # value may be None
 
+        # F6: per-actor material status (same actor pass — no extra round-trip)
+        mat_status = measure_actor_material_status(actor)
+
         measurements.append(
             SmallPartMeasurement(
                 actor=actor,
@@ -351,6 +363,9 @@ def detect_small_parts(
                 parent_part_label=parent_label,
                 parent_chain_path=chain_path,
                 # parent_leaf_count / is_multi_leaf set in pass 2
+                material_count=mat_status.material_count,
+                override_status=mat_status.override_status,
+                material_path_top1=mat_status.material_path_top1,
             )
         )
 
