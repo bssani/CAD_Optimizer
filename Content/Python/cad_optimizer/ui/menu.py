@@ -60,6 +60,15 @@ class CADOptimizerDetectSmallPartsMediumCommand(unreal.ToolMenuEntryScript):
         run_detect_small_parts(threshold_cm=PRESETS["Medium"])
 
 
+@unreal.uclass()
+class CADOptimizerMaterialInventoryCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_material_inventory
+
+        run_material_inventory()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -110,6 +119,13 @@ def register_menu() -> None:
         name="CADOptimizer.DetectSmallParts.Medium",
         label="Detect Small Parts (F4) — Medium (< 5.0 cm)",
         tool_tip="F4: report bbox-diagonal < 5.0 cm. Detection-only.",
+    )
+    _register(
+        CADOptimizerMaterialInventoryCommand(),
+        name="CADOptimizer.MaterialInventory",
+        label="Material Inventory (F6)",
+        tool_tip="F6: walk level for unique material asset inventory; "
+                 "emits CSV + Output Log summary. Level unchanged.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
