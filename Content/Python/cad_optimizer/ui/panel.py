@@ -74,8 +74,11 @@ from cad_optimizer.instance_detector import (
     detect_instance_groups,
 )
 from cad_optimizer.material_inventory import (
+    HAS_OVERRIDE,
     MATERIAL_CATEGORY_ORDER,
     MaterialInventoryReport,
+    NO_SLOT,
+    SLOT_EMPTY,
     build_inventory,
 )
 from cad_optimizer.material_inventory import category_counts as material_category_counts
@@ -507,9 +510,9 @@ def _write_small_parts_csv(
             "docs/concepts/nx_naming_patterns.md).\n"
         )
         f.write(
-            "# material_count: smc.get_material() override count. "
-            "override_status: no_override actors fall back to mesh default "
-            "(typical for Datasmith CAD).\n"
+            "# material_count: smc.get_num_materials() returns. "
+            "override_status: no_slot|slot_empty|has_override (3-value enum, "
+            "see docs/concepts/material_analysis_c1yc_2_mcm.md Section 8).\n"
         )
         writer = csv.writer(f)
         writer.writerow([
@@ -725,24 +728,27 @@ def _log_small_parts_summary(
 
 
 def _format_override_status_block(measurements) -> List[str]:
-    """Material override status — 2 카운트 + anchor 라인.
+    """Material override status — 3-value enum (실차 검증 기반).
 
-    "no_override" 비율은 Datasmith CAD에서 흔한 정상 fallback 상태이므로
-    경고 X. anchor 텍스트로 박제 reference 노출 (사용자가 추후
-    "왜 절반이 no_override?" 질문 자체 답변 가능).
+    박제 (docs/concepts/material_analysis_c1yc_2_mcm.md Section 8):
+        - NO_SLOT: smc has no slots
+        - SLOT_EMPTY: slot exists but asset None → mesh default fallback
+        - HAS_OVERRIDE: slot + asset both present
+    SLOT_EMPTY 비율은 Datasmith CAD에서 흔한 정상 fallback 상태이므로
+    경고 X. anchor 텍스트로 박제 reference 노출.
     """
-    no_count = sum(
-        1 for m in measurements if m.override_status == "no_override"
-    )
-    has_count = len(measurements) - no_count
-    total = len(measurements)
-    no_pct = (no_count / total * 100.0) if total else 0.0
-    has_pct = (has_count / total * 100.0) if total else 0.0
+    no_slot = sum(1 for m in measurements if m.override_status == NO_SLOT)
+    slot_empty = sum(1 for m in measurements if m.override_status == SLOT_EMPTY)
+    has_override = sum(1 for m in measurements if m.override_status == HAS_OVERRIDE)
+    total = len(measurements) or 1  # division-by-zero 가드
     return [
         "  Material override status:",
-        f"    no_override : {no_count:>6,} ({no_pct:>4.1f}%) "
-        f"← mesh default fallback (typical for Datasmith CAD)",
-        f"    has_override: {has_count:>6,} ({has_pct:>4.1f}%)",
+        f"    no_slot     : {no_slot:>6,} ({no_slot / total * 100.0:>4.1f}%) "
+        f"← no material slot",
+        f"    slot_empty  : {slot_empty:>6,} ({slot_empty / total * 100.0:>4.1f}%) "
+        f"← slot exists, asset None → mesh default fallback (typical for Datasmith CAD)",
+        f"    has_override: {has_override:>6,} ({has_override / total * 100.0:>4.1f}%) "
+        f"← slot + asset present",
         "  See docs/concepts/material_analysis_c1yc_2_mcm.md for details.",
     ]
 
@@ -806,10 +812,14 @@ def _write_inventory_csv(
         f.write(f"# Level actors scanned: {report.total_actors_scanned}\n")
         f.write(f"# StaticMeshActor count: {report.sma_count}\n")
         f.write(f"# Total unique materials: {report.total_unique_materials}\n")
-        f.write("# usage_via_override = counted from smc.get_material(i)\n")
+        f.write("# usage_via_override = counted from smc.get_material(i) (HAS_OVERRIDE actors)\n")
         f.write(
-            "# usage_via_default = counted when actor has no override "
+            "# usage_via_default = counted when actor SLOT_EMPTY/NO_SLOT "
             "(mesh default fallback)\n"
+        )
+        f.write(
+            "# override_status (3-value enum): no_slot|slot_empty|has_override. "
+            "See docs/concepts/material_analysis_c1yc_2_mcm.md Section 8.\n"
         )
 
         writer = csv.writer(f)
@@ -846,7 +856,8 @@ def _log_inventory_summary(
     prefix = "[CANCELED — partial results] " if was_cancelled else ""
     other = report.total_actors_scanned - report.sma_count
     sma_safe = report.sma_count if report.sma_count else 1
-    no_pct = report.no_override_count / sma_safe * 100.0
+    no_slot_pct = report.no_slot_count / sma_safe * 100.0
+    slot_empty_pct = report.slot_empty_count / sma_safe * 100.0
     has_pct = report.has_override_count / sma_safe * 100.0
 
     lines = [
@@ -856,7 +867,8 @@ def _log_inventory_summary(
         f"  Skipped: {report.skipped_no_smc} no-smc, "
         f"{report.skipped_no_sm} no-mesh",
         f"  Override status: "
-        f"{report.no_override_count:,} no_override ({no_pct:.1f}%), "
+        f"{report.no_slot_count:,} no_slot ({no_slot_pct:.1f}%), "
+        f"{report.slot_empty_count:,} slot_empty ({slot_empty_pct:.1f}%), "
         f"{report.has_override_count:,} has_override ({has_pct:.1f}%)",
         f"  Total unique materials: {report.total_unique_materials}",
         "",
