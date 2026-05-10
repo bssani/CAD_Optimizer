@@ -73,6 +73,7 @@ from cad_optimizer.instance_detector import (
     InstanceDetectionReport,
     detect_instance_groups,
 )
+from cad_optimizer.integrated_report import VehicleMeta, build_report
 from cad_optimizer.material_inventory import (
     HAS_OVERRIDE,
     MATERIAL_CATEGORY_ORDER,
@@ -903,6 +904,119 @@ def _log_inventory_summary(
 
     for line in lines:
         unreal.log(line)
+
+
+# ─── F7: Integrated Report ──────────────────────────────────────────
+
+
+def _latest_csv(out_dir: str, prefix: str) -> str:
+    """가장 최근 timestamp의 CSV 경로 반환. 없으면 빈 문자열.
+
+    Filename pattern: ``<prefix><YYYYMMDD_HHMMSS>.csv``. lexicographic
+    sort = chronological (timestamp 형식이 zero-padded).
+    """
+    if not os.path.isdir(out_dir):
+        return ""
+    candidates = sorted(
+        f for f in os.listdir(out_dir)
+        if f.startswith(prefix) and f.endswith(".csv")
+    )
+    if not candidates:
+        return ""
+    return os.path.join(out_dir, candidates[-1]).replace("\\", "/")
+
+
+def _get_current_level_name() -> str:
+    """현재 에디터의 level 이름. 실패 시 빈 문자열 (정상 경로 — F7 markdown은
+    그냥 미기록으로 표시). UnrealEditorSubsystem은 5.2+에서 표준."""
+    try:
+        ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+        world = ues.get_editor_world() if ues else None
+        if world:
+            return world.get_name()
+    except Exception:
+        pass
+    return ""
+
+
+def _infer_vehicle_code(level_name: str) -> str:
+    """레벨명에서 차량 코드 추출. ``L_<code>`` prefix 제거."""
+    if level_name.startswith("L_"):
+        return level_name[2:]
+    return level_name
+
+
+def run_integrated_report() -> None:
+    """F7 entry point — orchestrate F2/F3/F4/F6 + build markdown report.
+
+    한 클릭으로 전체 측정 + 통합 박제. 각 F-task는 자체 CSV/Output Log
+    부수 효과 발생 (F3 instance_report / F4 small_part_report /
+    F6 material_inventory). F7은 그 결과들을 집계해 단일 markdown
+    (primary 산출물) 생성.
+
+    페이즈:
+        1. F2 Mesh Stats (in-memory)
+        2. F3 Instance Detection (CSV side-effect)
+        3. F4 Small Part Detection (CSV side-effect, F5 nx_category +
+           F6 material 컬럼 포함)
+        4. F6 Material Inventory (CSV side-effect, asset-level)
+        5. Locate latest supporting CSVs + build markdown + write to disk
+    """
+    unreal.log("=" * 60)
+    unreal.log("[CAD_Optimizer F7] Starting integrated measurement pipeline...")
+    unreal.log("=" * 60)
+
+    # Phase 1-4: 각 F-task 실행. 각각 자체 ScopedSlowTask + Output Log 발생.
+    f2_report = run_scan_level(widget=None, skip_hidden=False)
+    f3_report = run_detect_instances()
+    f4_report = run_detect_small_parts(threshold_cm=PRESETS["Small"])
+    run_material_inventory()
+
+    # Phase 5: 산출물 경로 수집 + markdown 생성.
+    saved_dir = unreal.Paths.convert_relative_path_to_full(
+        unreal.Paths.project_saved_dir()
+    )
+    out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+
+    f3_csv = _latest_csv(out_dir, "instance_report_")
+    f4_csv = _latest_csv(out_dir, "small_part_report_")
+    f6_csv = _latest_csv(out_dir, "material_inventory_")
+
+    level_name = _get_current_level_name()
+    vehicle_code = _infer_vehicle_code(level_name) if level_name else ""
+
+    vm = VehicleMeta(
+        vehicle_code=vehicle_code,
+        level_name=level_name,
+        plugin_commit="(see git log)",
+        measured_at=datetime.now(),
+        threshold_cm=f4_report.threshold_cm,
+    )
+
+    md = build_report(
+        f2_stats=f2_report,
+        f3_stats=f3_report,
+        f4_report=f4_report,
+        vehicle_meta=vm,
+        f4_csv_path=f4_csv,
+        f6_inventory_csv_path=f6_csv,
+        f3_csv_path=f3_csv,
+    )
+
+    md_filename = f"integrated_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    md_path = os.path.join(out_dir, md_filename)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md)
+    md_path_norm = md_path.replace("\\", "/")
+
+    # Output Log A' pattern — Primary / Supporting 명시.
+    unreal.log("=" * 60)
+    unreal.log("[CAD_Optimizer F7] Integrated report generated.")
+    unreal.log(f"  Primary:    {md_path_norm}")
+    unreal.log(f"  Supporting: {f4_csv}")
+    unreal.log(f"              {f6_csv}")
+    unreal.log(f"              {f3_csv}")
+    unreal.log("=" * 60)
 
 
 # ─── Widget helper plumbing (shared by F2) ──────────────────────────

@@ -69,6 +69,15 @@ class CADOptimizerMaterialInventoryCommand(unreal.ToolMenuEntryScript):
         run_material_inventory()
 
 
+@unreal.uclass()
+class CADOptimizerIntegratedReportCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_integrated_report
+
+        run_integrated_report()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -126,6 +135,14 @@ def register_menu() -> None:
         label="Material Inventory (F6)",
         tool_tip="F6: walk level for unique material asset inventory; "
                  "emits CSV + Output Log summary. Level unchanged.",
+    )
+    _register(
+        CADOptimizerIntegratedReportCommand(),
+        name="CADOptimizer.IntegratedReport",
+        label="📊 Generate Integrated Report (F7)",
+        tool_tip="F7: orchestrate F2/F3/F4/F6 + emit single integrated "
+                 "markdown report (primary) + supporting CSVs. Use at "
+                 "측정 박제 시점.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
