@@ -36,7 +36,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import unreal
 
 from cad_optimizer.material_inventory import (
-    NO_OVERRIDE,
+    NO_SLOT,
     measure_actor_material_status,
 )
 
@@ -88,9 +88,9 @@ class SmallPartMeasurement:
     parent_chain_path: str = ""        # filtered chain "root > ... > immediate_parent"
     parent_leaf_count: int = 0         # set in pass 2
     is_multi_leaf: bool = False        # set in pass 2
-    # NEW (F6 — material status, 박제: docs/concepts/material_analysis_c1yc_2_mcm.md)
-    material_count: int = 0            # smc.get_material(i) override count
-    override_status: str = NO_OVERRIDE  # NO_OVERRIDE | HAS_OVERRIDE
+    # NEW (F6 — material status, 박제: docs/concepts/material_analysis_c1yc_2_mcm.md Section 8)
+    material_count: int = 0            # smc.get_num_materials() returns
+    override_status: str = NO_SLOT     # NO_SLOT | SLOT_EMPTY | HAS_OVERRIDE (3-value enum)
     material_path_top1: str = ""       # primary material (override or mesh default)
 
     def get_label(self) -> str:

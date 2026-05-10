@@ -195,7 +195,68 @@ Max slot count: **1**.
 
 ---
 
-## 8. F6 spec 설계 다음 단계
+> **2026-05-10 patch**: F6 코드 (`measure_actor_material_status`) 구현 후
+> 실차 재측정 결과, 본 박제 시 `no_override 58.9%` 분류는 실제로
+> `slot_empty` (slot 존재하지만 asset None) 케이스였음을 확인. 본 박제
+> 작성 시 사용한 Python Console 스크립트가 `smc.get_material(i) returns None`
+> 을 "no override"로 합쳐 분류 — 그러나 실제로는 slot 자체가 없는 게 아니라
+> 비어있는 상태. F6 코드는 3-value enum (`no_slot` / `slot_empty` /
+> `has_override`)로 분리하여 정정. 자세한 정의는 Section 8.
+>
+> 또한 본 박제 작성 시 카테고리 regex 가정 (`/02_Instance/<category>/` 단일
+> 패턴) 부정확함을 발견. Top 1 `MI_SectionMisc` (점유율 99.3%)는
+> `/01_Features/` 밑에 있어 UNKNOWN으로 분류됨. F6 코드는 multi-pattern
+> 방식으로 정정 + `Features` 카테고리 추가. 자세한 내용은 Section 8.
+
+---
+
+## 8. Override status — 3-value enum 정의 (실차 검증 patch)
+
+F6 코드 (`material_inventory.py`)에서 사용하는 `override_status` 값:
+
+| 값 | 정의 | C1YC_2_MCM 실측 |
+|----|------|-----------------|
+| `no_slot` | `smc.get_num_materials() == 0` | 0 (0%) |
+| `slot_empty` | slot 존재, `smc.get_material(0)` returns None → mesh default fallback | 26,980 (58.9%) |
+| `has_override` | slot 존재 + asset 존재 | 18,829 (41.1%) |
+
+**해석**:
+- Datasmith CAD import는 모든 actor의 component에 material slot을 채움
+  (no_slot이 0건인 이유)
+- 실제로 mesh default와 다른 material을 쓰는 actor는 41.1%만
+- 나머지 58.9%는 slot은 있지만 asset이 None — Datasmith가 slot만 만들고
+  실제 binding은 mesh default에 위임
+- PCVR 평가 관점: `slot_empty`가 functional no-override임. Nanite material
+  instancing 분석 시 두 카테고리 (slot_empty + no_slot)를 합쳐서
+  "mesh default 사용자 N개"로 처리 가능.
+
+### Material asset usage 카운트 분리
+
+- `usage_via_override`: HAS_OVERRIDE actor가 명시적으로 binding한 횟수
+- `usage_via_default`: SLOT_EMPTY 또는 NO_SLOT actor가 mesh default로
+  fallback한 횟수
+- `total_usage = usage_via_override + usage_via_default`
+
+이 분리로 "실제 override material로 자주 쓰이는 것" vs "mesh default
+때문에 자주 카운트되는 것" 구분 가능.
+
+### 카테고리 regex 정정
+
+박제 작성 시 가정: 모든 material이 `/02_Instance/<category>/` 밑.
+**부정확** — Top 1 `MI_SectionMisc` (점유 99.3%)는 `/01_Features/` 밑.
+
+신규 카테고리 추출 우선순위 (F6 코드 `_parse_category`):
+1. `/02_Instance/<category>/` — 정상 카테고리 (canonical name 매치 시)
+2. `/01_Features/` — 고정 `Features` 카테고리 (basename 무시)
+3. `/00_Material/<category>/` — fallback 디렉토리 (canonical 매치 시)
+4. anything else → `UNKNOWN`
+
+`MATERIAL_CATEGORY_ORDER` 확장: 기존 6 카테고리 + UNKNOWN → 7 카테고리
++ `Features` + UNKNOWN.
+
+---
+
+## 9. F6 spec 설계 다음 단계 (역사 기록)
 
 본 markdown 박제 완료 후:
 

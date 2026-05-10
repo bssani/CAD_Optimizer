@@ -3,29 +3,29 @@
 Two-angle measurement of materials in the level:
 
 1. **Per-actor status** — for each StaticMeshActor:
-   - material_count: smc.get_material() returns (component-level)
-   - override_status: "no_override" if count == 0 else "has_override"
-   - material_path_top1: first override path, or mesh default fallback
+   - material_count: smc.get_num_materials() returns
+   - override_status: 3-value enum — no_slot | slot_empty | has_override
+     (실차 검증 기반, 박제 docs/concepts/material_analysis_c1yc_2_mcm.md
+     Section 8)
+   - material_path_top1: rendering material — override or mesh default
+     fallback. Empty only when both component override and mesh default
+     are None.
 
 2. **Asset inventory** — for each unique material path used in the level:
-   - usage_count (via smc override or sm default)
-   - category (parsed from path: CarPaint/Metal/Plastic/Glass/Rubber/Misc/UNKNOWN)
-   - is_instance (MI_* prefix vs M_* base material)
+   - usage_via_override: HAS_OVERRIDE actors가 명시 binding한 횟수
+   - usage_via_default: SLOT_EMPTY/NO_SLOT actors가 mesh default로 fallback한 횟수
+   - category: parsed from path (CarPaint/Metal/.../Features/UNKNOWN)
+   - is_instance: MI_* prefix vs M_* base
 
 Notes:
-    - F2 measures sm.static_materials (mesh-level). F6 measures
-      smc.get_material() (component-level). The two counts often differ
-      — typical for Datasmith CAD import where most actors do not
-      override the mesh default material. ~58.9% no_override observed
-      in C1YC_2_MCM (see docs/concepts/material_analysis_c1yc_2_mcm.md).
-      This is normal fallback behavior, not a defect.
-    - Inventory is shallow: it identifies which materials exist and how
-      they are used. Material asset properties (textures, parameters)
-      are NOT compared — Phase 2 territory if duplicate detection across
-      asset properties is needed.
-    - Mesh default fallback path uses ``sm.static_materials[0].material_interface``
-      (verified in F2 stats.py) — NOT ``sm.get_material(0)`` which is
-      not confirmed in UE 5.5 Python.
+    - Datasmith CAD import는 component slot을 보통 만들지만 asset binding은
+      mesh default에 위임하는 경우가 많음 (~58.9% slot_empty in C1YC_2_MCM).
+      이건 결함이 아니라 정상 fallback 상태.
+    - Mesh default fallback path는 ``sm.static_materials[0].material_interface``
+      (F2 검증된 API) 사용. ``sm.get_material(0)``은 UE 5.5 Python에서
+      미검증이라 회피. 박제: docs/lessons_learned/api_verification_first.md.
+    - Inventory는 shallow: 어떤 material이 어떻게 쓰이는가만. Material asset
+      속성 (텍스처, 파라미터) 비교는 Phase 2.
 """
 from __future__ import annotations
 
@@ -37,31 +37,29 @@ from typing import Callable, List, Optional
 import unreal
 
 
-# 박제: docs/concepts/material_analysis_c1yc_2_mcm.md
-# Path 카테고리 추출 — /Game/00_PQDQ/00_Material/02_Instance/<category>/MI_*
-_CATEGORY_PATTERN = re.compile(r"/02_Instance/([^/]+)/")
-
 # Material asset 분류 카테고리 (canonical 순서, Output Log 안정성).
+# Features는 /01_Features/ 경로 (Top 1 MI_SectionMisc 등 — 점유율 높음).
 MATERIAL_CATEGORY_ORDER: List[str] = [
-    "CarPaint", "Metal", "Plastic", "Glass", "Rubber", "Misc", "UNKNOWN"
+    "CarPaint", "Metal", "Plastic", "Glass", "Rubber", "Misc",
+    "Features",
+    "UNKNOWN"
 ]
 
-# Override status 두 가지.
-NO_OVERRIDE = "no_override"
-HAS_OVERRIDE = "has_override"
+
+# Override status — 3-value enum (실차 검증 기반).
+# 박제: docs/concepts/material_analysis_c1yc_2_mcm.md Section 8
+NO_SLOT = "no_slot"               # smc.get_num_materials() == 0
+SLOT_EMPTY = "slot_empty"          # slot 존재, smc.get_material(i) returns None
+                                   # → mesh default fallback (typical Datasmith CAD)
+HAS_OVERRIDE = "has_override"      # slot 존재 + asset 존재
 
 
 @dataclass
 class PerActorMaterialStatus:
-    """Per-actor material info — joined into F4 CSV row.
+    """Per-actor material info — joined into F4 CSV row."""
 
-    Caller (F4 ``detect_small_parts``) ensures parallel order with
-    its measurements list; F6 stores these on the measurement itself
-    via ``small_part_detector.SmallPartMeasurement`` field extension.
-    """
-
-    material_count: int        # smc.get_material(i) override count
-    override_status: str       # NO_OVERRIDE | HAS_OVERRIDE
+    material_count: int        # smc.get_num_materials() returns
+    override_status: str       # NO_SLOT | SLOT_EMPTY | HAS_OVERRIDE
     material_path_top1: str    # primary material (override or mesh default)
 
 
@@ -87,8 +85,10 @@ class MaterialInventoryReport:
     sma_count: int
     skipped_no_smc: int
     skipped_no_sm: int
-    no_override_count: int          # material_count == 0
-    has_override_count: int         # material_count > 0
+    # 3-value enum 카운터 (박제 Section 8)
+    no_slot_count: int
+    slot_empty_count: int
+    has_override_count: int
     assets: List[MaterialAssetEntry]  # sorted by total_usage desc
 
     @property
@@ -100,11 +100,31 @@ class MaterialInventoryReport:
 
 
 def _parse_category(material_path: str) -> str:
-    """Extract category from path. Returns 'UNKNOWN' if no match."""
-    match = _CATEGORY_PATTERN.search(material_path)
-    if match:
-        cat = match.group(1)
+    """Extract category from path. Priority order (실차 검증 기반):
+
+    1. ``/02_Instance/<category>/`` — must match canonical name
+    2. ``/01_Features/`` → fixed ``"Features"`` (basename 무시; Features
+       디렉토리는 purpose-organized)
+    3. ``/00_Material/<category>/`` (fallback) — must match canonical name
+    4. anything else → ``"UNKNOWN"``
+    """
+    # Pattern 1: /02_Instance/<category>/
+    m = re.search(r"/02_Instance/([^/]+)/", material_path)
+    if m:
+        cat = m.group(1)
         return cat if cat in MATERIAL_CATEGORY_ORDER else "UNKNOWN"
+
+    # Pattern 2: /01_Features/ — fixed Features 카테고리
+    if "/01_Features/" in material_path:
+        return "Features"
+
+    # Pattern 3: /00_Material/<category>/ (fallback)
+    m = re.search(r"/00_Material/([^/]+)/", material_path)
+    if m:
+        cat = m.group(1)
+        if cat in MATERIAL_CATEGORY_ORDER:
+            return cat
+
     return "UNKNOWN"
 
 
@@ -121,54 +141,75 @@ def _classify_prefix(material_path: str) -> tuple[bool, bool]:
     return is_instance, is_base
 
 
-def _mesh_default_top_path(sm) -> str:
-    """First mesh default material path via ``sm.static_materials`` (F2 verified API).
+def _get_mesh_default_path(smc) -> str:
+    """Mesh default material path (slot 0). Empty string if unavailable.
 
-    Returns empty string if no slots or material_interface is None.
+    Uses ``sm.static_materials[0].material_interface`` (F2-verified API,
+    UE 5.5 compatible). Avoids ``sm.get_material()`` which may not exist
+    in this UE version (api_verification_first.md).
     """
-    try:
-        slots = sm.static_materials
-    except Exception:
+    sm = smc.static_mesh
+    if sm is None:
         return ""
-    if not slots:
+
+    static_materials = sm.static_materials if hasattr(sm, "static_materials") else None
+    if not static_materials:
         return ""
+
     try:
-        slot = slots[0]
+        first_static = static_materials[0]
     except (IndexError, TypeError):
         return ""
-    mat = getattr(slot, "material_interface", None)
-    if mat is None:
+
+    interface = getattr(first_static, "material_interface", None)
+    if interface is None:
         return ""
-    return mat.get_path_name()
+
+    return interface.get_path_name()
 
 
 # ─── Per-actor status (F4 측정 시 결합 호출용) ──────────────────────
 
 
 def measure_actor_material_status(actor) -> PerActorMaterialStatus:
-    """For one StaticMeshActor: get override count + primary path.
+    """Per-actor material override status (3-value enum).
 
-    Caller (small_part_detector.detect_small_parts) supplies actors that
-    already passed F4's null-safety gates (smc/sm not None). This
-    function still re-validates defensively.
+    Determines one of three states:
+        - NO_SLOT: ``smc.get_num_materials() == 0``
+        - SLOT_EMPTY: slot exists but ``smc.get_material(0)`` returns None.
+          Renders using mesh default. Typical for Datasmith CAD import
+          (~58.9% in C1YC_2_MCM).
+        - HAS_OVERRIDE: slot exists + asset present.
+
+    ``material_path_top1`` always tries to populate with the effective
+    rendering material:
+        - HAS_OVERRIDE: ``smc.get_material(0).get_path_name()``
+        - SLOT_EMPTY / NO_SLOT: mesh default fallback (sm.static_materials[0])
+        - All paths None: empty string
     """
     smc = actor.static_mesh_component
     if smc is None:
-        return PerActorMaterialStatus(0, NO_OVERRIDE, "")
+        return PerActorMaterialStatus(0, NO_SLOT, "")
 
     n_overrides = smc.get_num_materials() if hasattr(smc, "get_num_materials") else 0
 
-    if n_overrides > 0:
-        m = smc.get_material(0)
-        path = m.get_path_name() if m else ""
-        return PerActorMaterialStatus(n_overrides, HAS_OVERRIDE, path)
+    if n_overrides == 0:
+        # NO_SLOT: 슬롯 자체가 없음. mesh default 채울 수 있으면 채움.
+        return PerActorMaterialStatus(0, NO_SLOT, _get_mesh_default_path(smc))
 
-    # No override: fallback to mesh default
-    sm = smc.static_mesh
-    if sm is None:
-        return PerActorMaterialStatus(0, NO_OVERRIDE, "")
+    # 슬롯 존재. 첫 번째 slot 값 확인
+    first_material = smc.get_material(0)
 
-    return PerActorMaterialStatus(0, NO_OVERRIDE, _mesh_default_top_path(sm))
+    if first_material is None:
+        # SLOT_EMPTY: 슬롯 있지만 asset None → mesh default fallback
+        return PerActorMaterialStatus(
+            n_overrides, SLOT_EMPTY, _get_mesh_default_path(smc)
+        )
+
+    # HAS_OVERRIDE: slot + asset 둘 다 존재
+    return PerActorMaterialStatus(
+        n_overrides, HAS_OVERRIDE, first_material.get_path_name()
+    )
 
 
 # ─── Asset inventory (F6 menu entry용) ──────────────────────────────
@@ -182,11 +223,14 @@ def build_inventory(
     """Walk all StaticMeshActors and build material asset inventory.
 
     Two counters per material:
-        - usage_via_override: counted from smc.get_material(i) iterations
-        - usage_via_default: counted when actor has no override and
-          falls back to sm default (mesh-level)
+        - ``usage_via_override``: HAS_OVERRIDE actor가 명시 binding한 횟수
+        - ``usage_via_default``: SLOT_EMPTY/NO_SLOT actor가 mesh default로
+          fallback한 횟수
 
-    Total unique materials = len(assets). Sorted by total_usage desc.
+    Per-actor counter (3-value enum): ``no_slot_count``, ``slot_empty_count``,
+    ``has_override_count``.
+
+    Total unique materials = ``len(assets)``. Sorted by ``total_usage`` desc.
     """
     override_usage: Counter = Counter()
     default_usage: Counter = Counter()
@@ -195,7 +239,8 @@ def build_inventory(
     sma_count = 0
     no_smc = 0
     no_sm = 0
-    no_override = 0
+    no_slot = 0
+    slot_empty = 0
     has_override = 0
 
     for actor in actors:
@@ -222,19 +267,27 @@ def build_inventory(
 
         n_overrides = smc.get_num_materials() if hasattr(smc, "get_num_materials") else 0
 
-        if n_overrides > 0:
-            has_override += 1
-            for i in range(n_overrides):
-                m = smc.get_material(i)
-                if m:
-                    override_usage[m.get_path_name()] += 1
-        else:
-            no_override += 1
-            # Mesh default fallback — primary slot only (sufficient for inventory;
-            # full multi-slot default tracking is Phase 2). Verified API path.
-            default_path = _mesh_default_top_path(sm)
+        if n_overrides == 0:
+            no_slot += 1
+            # NO_SLOT도 mesh default 카운트 (실차에서 0건일 가능성 큼)
+            default_path = _get_mesh_default_path(smc)
             if default_path:
                 default_usage[default_path] += 1
+        else:
+            first = smc.get_material(0)
+            if first is None:
+                slot_empty += 1
+                # SLOT_EMPTY: mesh default fallback 카운트
+                default_path = _get_mesh_default_path(smc)
+                if default_path:
+                    default_usage[default_path] += 1
+            else:
+                has_override += 1
+                # HAS_OVERRIDE: 모든 slot의 override 카운트
+                for i in range(n_overrides):
+                    m = smc.get_material(i)
+                    if m:
+                        override_usage[m.get_path_name()] += 1
 
         on_progress()
 
@@ -259,7 +312,8 @@ def build_inventory(
         sma_count=sma_count,
         skipped_no_smc=no_smc,
         skipped_no_sm=no_sm,
-        no_override_count=no_override,
+        no_slot_count=no_slot,
+        slot_empty_count=slot_empty,
         has_override_count=has_override,
         assets=assets,
     )
