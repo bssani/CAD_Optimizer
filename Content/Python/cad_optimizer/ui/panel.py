@@ -967,9 +967,12 @@ def run_integrated_report() -> None:
     unreal.log("=" * 60)
 
     # Phase 1-4: 각 F-task 실행. 각각 자체 ScopedSlowTask + Output Log 발생.
+    # F4 threshold = Tiny (0.5 cm) — F4/F5 박제 baseline과 일치
+    # (docs/measurements/f4_c1yc_2_mcm.md, f5_nx_distribution_c1yc_2_mcm.md
+    # 둘 다 Tiny 기준). 차량 간 비교의 baseline 일관성 확보.
     f2_report = run_scan_level(widget=None, skip_hidden=False)
     f3_report = run_detect_instances()
-    f4_report = run_detect_small_parts(threshold_cm=PRESETS["Small"])
+    f4_report = run_detect_small_parts(threshold_cm=PRESETS["Tiny"])
     run_material_inventory()
 
     # Phase 5: 산출물 경로 수집 + markdown 생성.

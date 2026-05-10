@@ -373,7 +373,7 @@ def _render_section_crosstab_f5(
 ) -> str:
     ct = _crosstab_nx_x_small(measurements, categories, threshold_cm)
     lines = [
-        _h(2, f"7. F4 × F5 Cross-tab — nx_category × is_small (Tiny @ {threshold_cm:.1f} cm)"),
+        _h(2, f"7. F4 × F5 Cross-tab — nx_category × is_small (@ {threshold_cm:.1f} cm)"),
         "",
         "| nx_category | small | not small | total | % small |",
         "|-------------|-------|-----------|-------|---------|",
