@@ -39,6 +39,15 @@ from cad_optimizer.material_inventory import (
     SLOT_EMPTY,
     _parse_category,
 )
+from cad_optimizer.metadata_tagger import (
+    TIER_CULL_HIGH,
+    TIER_CULL_MID,
+    TIER_KEEP,
+    TIER_ORDER,
+    TIER_REVIEW,
+    compute_tiers_for_report,
+    count_tiers,
+)
 from cad_optimizer.nx_naming import (
     NX_CATEGORY_ORDER,
     classify_measurements,
@@ -126,7 +135,7 @@ def build_report(
         _render_section_f6(measurements, categories),
         _render_section_crosstab_f5(measurements, categories, threshold),
         _render_section_crosstab_f6(measurements, categories),
-        _render_section_f8_placeholder(),
+        _render_section_f8_preview(f4_report),
         _render_section_baseline(
             f2_stats, f3_stats, f4_report, measurements, categories
         ),
@@ -415,12 +424,55 @@ def _render_section_crosstab_f6(
     return "\n".join(lines)
 
 
-def _render_section_f8_placeholder() -> str:
-    return "\n".join([
-        _h(2, "9. F8 — Metadata Tags"),
+def _render_section_f8_preview(f4_report: "SmallPartDetectionReport") -> str:
+    """F7 § 9 — F8 tier 예상 분포 (mutation 0, preview only).
+
+    F4 measurements를 ``compute_tiers_for_report``로 4-tier 분류 후 카운트.
+    F8 메뉴 실행 시 동일 입력이라면 동일 분포 (idempotent 보장 — 박제 §12).
+
+    글자 single source: ``metadata_tagger.TIER_*`` 상수 import. integrated_report
+    내 hardcoded string 0.
+    """
+    tiers = compute_tiers_for_report(f4_report, threshold_cm=0.5)
+    counts = count_tiers(tiers)
+    total = sum(counts.values())
+
+    def _pct(n: int) -> float:
+        # div-by-zero 가드 (빈 measurements 안전)
+        return (n / total * 100.0) if total > 0 else 0.0
+
+    conditions = {
+        TIER_CULL_HIGH:
+            "small AND slot_empty AND nx_category ∈ {LATCH, BRACKET}",
+        TIER_CULL_MID:
+            "small AND slot_empty (그 외 카테고리)",
+        TIER_REVIEW:
+            "small AND (has_override OR no_slot)",
+        TIER_KEEP:
+            "not small (tag 부재로 implicit)",
+    }
+
+    lines = [
+        _h(2, "9. F8 — Metadata Tags (예상 분포, 실제 부여는 별도 메뉴)"),
         "",
-        "<!-- F8 placeholder, populated post-F8 implementation -->",
+        "| Tier | 카운트 | 비중 | 조건 |",
+        "|------|--------|------|------|",
+    ]
+    for tier in TIER_ORDER:
+        cnt = counts.get(tier, 0)
+        lines.append(
+            f"| `{tier}` | {cnt:,} | {_pct(cnt):.2f}% | {conditions[tier]} |"
+        )
+    lines.append(
+        f"| **Total** | **{total:,}** | **100.00%** | |"
+    )
+    lines.extend([
+        "",
+        "> 실제 부여: `Tools → 🏷️ Apply F8 Metadata Tags`",
+        "> 위 카운트는 본 리포트 생성 시점의 F4 measurements 기반 예상치.",
+        "> F8 메뉴 실행 시 동일 입력이라면 동일 분포 (idempotent).",
     ])
+    return "\n".join(lines)
 
 
 def _render_section_baseline(

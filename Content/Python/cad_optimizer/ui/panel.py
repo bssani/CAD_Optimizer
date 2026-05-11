@@ -83,6 +83,12 @@ from cad_optimizer.material_inventory import (
     build_inventory,
 )
 from cad_optimizer.material_inventory import category_counts as material_category_counts
+from cad_optimizer.metadata_tagger import (
+    TIER_KEEP,
+    TIER_ORDER,
+    TagApplicationResult,
+    apply_tags_to_level,
+)
 from cad_optimizer.nx_naming import (
     NX_CATEGORY_ORDER,
     UNCATEGORIZED,
@@ -1020,6 +1026,100 @@ def run_integrated_report() -> None:
     unreal.log(f"              {f6_csv}")
     unreal.log(f"              {f3_csv}")
     unreal.log("=" * 60)
+
+
+# ─── F8: Metadata Tagging ───────────────────────────────────────────
+
+
+def _make_f8_csv_path() -> str:
+    """F8 CSV 경로 생성. F4/F6 inventory CSV와 같은 디렉터리.
+
+    Note:
+        F4 / F6 / F7 path helpers는 각자 inline 구현됨 (Saved/CAD_Optimizer/
+        + prefix + timestamp). 본 helper도 동일 패턴 — Phase 1 cleanup 시
+        path helper 통합 검토 가능 (현재는 scope creep 회피).
+    """
+    saved_dir = unreal.Paths.convert_relative_path_to_full(
+        unreal.Paths.project_saved_dir()
+    )
+    out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+    os.makedirs(out_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(out_dir, f"f8_metadata_{ts}.csv")
+
+
+def _print_f8_output_log(result: TagApplicationResult) -> None:
+    """F8 결과 Output Log 박제. Tagged vs Implicit Keep 시각적 분리."""
+    unreal.log("=" * 60)
+    unreal.log("[CAD_Optimizer F8] Metadata Tagging Complete")
+    unreal.log("=" * 60)
+    unreal.log(f"Total measurements: {result.total_actors:,}")
+    unreal.log("")
+    unreal.log(f"Tagged (actor.tags applied): {result.tagged:,}")
+    for tier in TIER_ORDER:
+        if tier == TIER_KEEP:
+            continue  # Keep은 implicit, 아래 분리 출력
+        count = result.tier_counts.get(tier, 0)
+        unreal.log(f"  {tier:<25s}: {count:>6,}")
+    unreal.log("")
+    unreal.log(
+        f"Implicit Keep (CSV only, no actor.tags): {result.implicit_keep:,}"
+    )
+    if result.not_found_in_level > 0:
+        unreal.log_warning(
+            f"Not found in level (stale actor refs): "
+            f"{result.not_found_in_level:,}"
+        )
+    unreal.log("")
+    unreal.log(f"CSV: {result.csv_path}")
+    unreal.log_warning(
+        "⚠ Level dirty — File → Save All to persist tags"
+    )
+    unreal.log("=" * 60)
+
+
+def run_apply_metadata_tags() -> None:
+    """F8 entry point — F4 fresh re-run + 4-tier metadata tag 부여.
+
+    Tier 결정 입력: bbox_diagonal (F4) + nx_category (F5) + override_status (F6).
+    Tag prefix: ``CADOpt_F8_``. Idempotent — 기존 ``CADOpt_F8_*`` tag 제거 후
+    새로 부여. 비-F8 tag 보존.
+
+    Implicit Keep: ``not is_small`` actor는 tag 부여 X (outliner 노이즈 회피).
+    단 CSV에는 모든 actor 박제 (실제 적용 상태 = CSV가 truth).
+
+    Visibility culling은 Phase 3 scope. 본 함수는 metadata 준비만.
+    """
+    unreal.log("=" * 60)
+    unreal.log("[CAD_Optimizer F8] Starting metadata tagging pipeline...")
+    unreal.log("=" * 60)
+
+    # F4 fresh run — F5 nx_category + F6 override_status도 measurement 안에
+    # baked-in. SmallPartMeasurement.actor 직접 사용 (같은 세션이라 ref 유효).
+    f4_report = run_detect_small_parts(threshold_cm=PRESETS["Tiny"])
+    total = len(f4_report.measurements)
+
+    csv_path = _make_f8_csv_path()
+
+    with unreal.ScopedSlowTask(total, "F8 Metadata Tagging...") as slow_task:
+        slow_task.make_dialog(True)
+
+        def _progress_adapter(current: int, total_: int, msg: str) -> bool:
+            """metadata_tagger callback adapter.
+            False 반환 시 metadata_tagger가 mid-stream 중단 (idempotent라 안전).
+            """
+            slow_task.enter_progress_frame(1, msg)
+            return not bool(slow_task.should_cancel())
+
+        result = apply_tags_to_level(
+            f4_report,
+            threshold_cm=PRESETS["Tiny"],
+            csv_out_path=csv_path,
+            progress_callback=_progress_adapter,
+            plugin_commit="(see git log)",
+        )
+
+    _print_f8_output_log(result)
 
 
 # ─── Widget helper plumbing (shared by F2) ──────────────────────────
