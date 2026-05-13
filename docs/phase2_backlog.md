@@ -108,5 +108,31 @@
 - UNCATEGORIZED 22.91% 일반성
 - ASSEMBLY 내부 분포
 - collapsed actor 발생 여부
+- **BRACKET small@0.5cm = 0 일반성** (항목 7 참조)
 
 다음 차량 측정 결과는 `docs/measurements/f4_<차량코드>.md`에 박제하고 본 backlog patch.
+
+---
+
+## 7. BRACKET small threshold 재검토
+
+**출처**: F8 C1YC_2_MCM 첫 측정 (`docs/measurements/f8_c1yc_2_mcm.md` § 6)
+
+**발견 정황**:
+- F8 tier schema 가설: `Cull_High = small AND slot_empty AND nx_category ∈ {LATCH, BRACKET}`
+- C1YC_2_MCM 실측: BRACKET small@0.5cm = **0개** (전체 BRACKET 1,284 중) → Cull_High 사실상 LATCH 단독 기여
+- BRACKET은 정의상 "구조 지지 부품"이라 0.5cm Tiny preset 통과 불가능할 가능성
+- 즉 Tier schema의 BRACKET 포함 자체가 (이 차종에서) dead branch
+
+**미룬 이유**:
+- 차량 1대 데이터로 일반화 불가. 다른 차종 (truck/SUV/EV)에서도 BRACKET small 0%인지 검증 필요
+- 일관되면 schema에서 BRACKET 제거 (Cull_High = LATCH only)
+- 일관되지 않으면 유지 (또는 BRACKET 전용 threshold 도입)
+- Phase 1 = 가설 박제, 정밀화는 Phase 2
+
+**Phase 2 액션**:
+- 다음 차량 2~3대 측정 후 BRACKET small 비율 박제
+- 0% 일관 → tier schema 정정 (LATCH 단독)
+- 변동 있음 → BRACKET 전용 threshold (예: 2cm) 도입 검토, 또는 BRACKET을 별도 tier로 분리
+
+**관련 backlog**: 본 항목 + #6 (다음 차량 측정)이 동반 진행
