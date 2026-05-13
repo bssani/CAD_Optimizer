@@ -78,6 +78,15 @@ class CADOptimizerIntegratedReportCommand(unreal.ToolMenuEntryScript):
         run_integrated_report()
 
 
+@unreal.uclass()
+class CADOptimizerApplyMetadataTagsCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_apply_metadata_tags
+
+        run_apply_metadata_tags()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -143,6 +152,14 @@ def register_menu() -> None:
         tool_tip="F7: orchestrate F2/F3/F4/F6 + emit single integrated "
                  "markdown report (primary) + supporting CSVs. Use at "
                  "측정 박제 시점.",
+    )
+    _register(
+        CADOptimizerApplyMetadataTagsCommand(),
+        name="CADOptimizer.ApplyMetadataTags",
+        label="🏷️ Apply F8 Metadata Tags",
+        tool_tip="F8: 4-tier metadata tag 부여 (CADOpt_F8_Cull_High/Mid/"
+                 "Review/Keep). Phase 3 visibility culling 대비. "
+                 "Level dirty — save 필요. Idempotent.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
