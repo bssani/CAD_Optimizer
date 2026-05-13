@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 > AI (Claude)와 협업할 때 매 세션 시작 시 참조하는 프로젝트 컨텍스트 파일.
-> **버전**: v0.7 (2026-05-04, Week 4 완료 반영)
+> **버전**: v0.8 (2026-05-13, Phase 1 종료 반영)
 
 ---
 
@@ -83,14 +83,21 @@
 
 ## 7. Phase 현황
 
-**현재**: Phase 1 Week 5 진입 직전 (Week 4 완료: 2026-05-04)
+**현재**: Phase 1 ✅ **완료** (2026-05-13, F8 main merge). Phase 2 진입 검토 대기.
 
 **Phase 1 기능 (Week별)**:
 - Week 1: **F0 (infrastructure)** + F1 (plugin 골격) ✅
 - Week 2: F2 (mesh 통계) ✅
 - Week 3: F3 (instance detection) ✅
 - Week 4: F4 (small part culling) + F5 (NX naming classification) ✅
-- Week 5: F6 (material consolidation) + F7 (리포트) + **F8 (metadata tagging)** ← 다음
+- Week 5: F6 (material consolidation) + F7 (리포트) + F8 (metadata tagging) + Phase 1 cleanup ✅
+
+**Phase 2 진입 결정 대기 항목**:
+- 다음 차량 측정 1~2건 (단일 차량 가정 검증, backlog #6)
+- Phase 2 첫 task 결정 (backlog #1 ERP/PLM lookup 1순위 후보)
+- 외부 라이브러리 검토 (사내 pip 정책 확인)
+
+상세 회고: `docs/phase1_retrospective.md`, 다음 입력: `docs/phase2_backlog.md`
 
 **Out of scope (Phase 1)**:
 - Mesh decimation
@@ -112,6 +119,7 @@
 | 학습 노트 (필립 작성) | `docs/concepts/*.md` |
 | 실차 측정 박제 | `docs/measurements/*.md` |
 | Phase 2 backlog | `docs/phase2_backlog.md` |
+| Phase 회고 | `docs/phase{N}_retrospective.md` |
 | Plugin 소스 | `Content/Python/cad_optimizer/` + `Content/EditorWidgets/` |
 
 ## 9. 세션 시작 시 권장 절차
@@ -160,7 +168,23 @@ Claude와 새 대화 시작할 때:
     parent에서 부품명 식별 (실차 검증으로 확정)
   - F5 분리 원칙 — 측정 (`small_part_detector.py`)과 분류 (`nx_naming.py`)
     모듈 분리, panel이 결합. 향후 F-pattern으로 재사용 가능.
+- **2026-05-13 (v0.8)**: **Phase 1 종료 반영**
+  - §7 Phase 1 완료 마킹 (2026-05-13 F8 main merge) + Phase 2 진입 대기 항목 명시
+  - §8 Phase 회고 파일 위치 추가 (`docs/phase{N}_retrospective.md`)
+  - 신규 박제: `docs/phase1_retrospective.md`, `docs/weekly_log/week05.md`,
+    `docs/measurements/f5_nx_distribution_c1yc_2_mcm.md`,
+    `docs/measurements/integrated_report_c1yc_2_mcm.md`,
+    `docs/measurements/f8_c1yc_2_mcm.md`,
+    `docs/concepts/material_analysis_c1yc_2_mcm.md`
+  - F-pattern 4번째 검증 (F8 mutation도 분리 원칙 유지 — `metadata_tagger.py`
+    `import unreal` 0건, actor duck-typed)
+  - F6 박제 self-correction 패턴 정립 (3-value enum: `no_slot` /
+    `slot_empty` / `has_override`)
+  - F8 BRACKET small=0 발견 → Phase 2 backlog #7 추가 (tier schema 차종
+    의존 검증 필요)
+  - End-to-end idempotent 검증 첫 사례 — F7 § 9 preview ↔ F8 apply 산술
+    일치 (1,680 / 2,499 / 2,959 / 38,671)
 
 ---
 
-*마지막 업데이트: 2026-05-04*
+*마지막 업데이트: 2026-05-13*

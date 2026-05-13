@@ -9,7 +9,7 @@
 | 차량 코드 | C1YC_2_MCM |
 | 프로젝트 경로 | `C:\Users\BZLS01\Downloads\C1YC_2_MCM` |
 | 레벨 | `L_C1YC_2_MCM` |
-| Plugin commit | `7b2854f` (F8 squash 직전 작업 commit) |
+| Plugin commit | `f339316` (F8 squash) |
 | Threshold | 0.5 cm (Tiny preset) |
 | Tag prefix | `CADOpt_F8_` |
 
@@ -127,7 +127,7 @@ F8_NON_F8_TAG_PRESERVED = TRUE
 
 ## 8. 관련 산출물
 
-- Plugin commit: `7b2854f`
+- Plugin commit: `f339316` (F8 squash)
 - F8 CSV: `Saved/CAD_Optimizer/f8_metadata_20260513_100653.csv` (Philip 로컬)
 - F7 integrated report: `Saved/CAD_Optimizer/integrated_report_20260513_103623.md`
 - 코드:
