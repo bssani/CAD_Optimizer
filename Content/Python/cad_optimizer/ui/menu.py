@@ -105,6 +105,15 @@ class CADOptimizerMergeActorsApplyCommand(unreal.ToolMenuEntryScript):
         run_merge_actors_apply()
 
 
+@unreal.uclass()
+class CADOptimizerOrganizeISMHoldersCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_organize_ism_holders
+
+        run_organize_ism_holders()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -193,6 +202,14 @@ def register_menu() -> None:
         tool_tip="Phase 2: ISM 변환 실제 적용. BP_ISMHolder spawn + per-instance "
                  "transform 부여 + source actor batch destroy. Level dirty — "
                  "save 필요. Undo로 전체 revert. Dry Run 먼저 권장.",
+    )
+    _register(
+        CADOptimizerOrganizeISMHoldersCommand(),
+        name="CADOptimizer.OrganizeISMHolders",
+        label="🗂️ Organize ISM Holders (Phase 2)",
+        tool_tip="Phase 2: 기존 BP_ISMHolder들을 'ISM_Merged/' outliner folder로 "
+                 "일괄 이동. 'CADOpt_P2_Merged_*' tag 보유 actor만 대상. "
+                 "Idempotent. 이전 코드 버전으로 머지된 holder 정리용.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
