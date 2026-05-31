@@ -92,6 +92,14 @@ class SmallPartMeasurement:
     material_count: int = 0            # smc.get_num_materials() returns
     override_status: str = NO_SLOT     # NO_SLOT | SLOT_EMPTY | HAS_OVERRIDE (3-value enum)
     material_path_top1: str = ""       # primary material (override or mesh default)
+    # NEW (Phase 2 backlog #3 — AABB union 합산. multi-leaf 부품의 진짜 크기)
+    # World-space bbox center. Pass 1에서 저장.
+    bbox_origin_x_cm: float = 0.0
+    bbox_origin_y_cm: float = 0.0
+    bbox_origin_z_cm: float = 0.0
+    # Multi-leaf group의 AABB union diagonal (single-leaf은 self diagonal).
+    # Pass 3에서 채움. small 판정은 기존 ``bbox_diagonal_cm`` 유지 — surfacing only.
+    bbox_diagonal_cm_merged: float = 0.0
 
     def get_label(self) -> str:
         """Lazy label resolution (F3 lesson — avoid editor round-trip
@@ -320,7 +328,7 @@ def detect_small_parts(
             on_progress()
             continue
 
-        _origin, extent = _get_actor_bounds(actor)
+        origin, extent = _get_actor_bounds(actor)
         if extent.x == 0 and extent.y == 0 and extent.z == 0:
             zero_bbox += 1
             on_progress()
@@ -366,6 +374,11 @@ def detect_small_parts(
                 material_count=mat_status.material_count,
                 override_status=mat_status.override_status,
                 material_path_top1=mat_status.material_path_top1,
+                # World bbox center — Pass 3 AABB union 입력
+                bbox_origin_x_cm=origin.x,
+                bbox_origin_y_cm=origin.y,
+                bbox_origin_z_cm=origin.z,
+                # bbox_diagonal_cm_merged set in pass 3
             )
         )
 
@@ -386,6 +399,37 @@ def detect_small_parts(
         else:
             m.parent_leaf_count = parent_leaf_counts[parent]
             m.is_multi_leaf = m.parent_leaf_count > 1
+
+    # ─── Pass 3: multi-leaf 그룹별 AABB union → merged diagonal ───
+    # Phase 2 backlog #3 (옵션 A — surfacing only, small 판정은 leaf 유지).
+    # Single-leaf 부품은 merged = self diagonal. Multi-leaf은 그룹의 world
+    # AABB union diagonal (over-estimate, false negative 안전 방향).
+    parent_to_measurements: Dict[unreal.Actor, List[SmallPartMeasurement]] = {}
+    for m in measurements:
+        parent = leaf_to_parent.get(m.actor)
+        if parent is None:
+            # Root-level (no attach parent) — group = self
+            m.bbox_diagonal_cm_merged = m.bbox_diagonal_cm
+            continue
+        parent_to_measurements.setdefault(parent, []).append(m)
+
+    for _parent, leaves in parent_to_measurements.items():
+        if len(leaves) == 1:
+            leaves[0].bbox_diagonal_cm_merged = leaves[0].bbox_diagonal_cm
+            continue
+        # AABB union — bbox_*_cm 은 full extent라 half는 /2.
+        min_x = min(m.bbox_origin_x_cm - m.bbox_x_cm / 2.0 for m in leaves)
+        max_x = max(m.bbox_origin_x_cm + m.bbox_x_cm / 2.0 for m in leaves)
+        min_y = min(m.bbox_origin_y_cm - m.bbox_y_cm / 2.0 for m in leaves)
+        max_y = max(m.bbox_origin_y_cm + m.bbox_y_cm / 2.0 for m in leaves)
+        min_z = min(m.bbox_origin_z_cm - m.bbox_z_cm / 2.0 for m in leaves)
+        max_z = max(m.bbox_origin_z_cm + m.bbox_z_cm / 2.0 for m in leaves)
+        dx = max_x - min_x
+        dy = max_y - min_y
+        dz = max_z - min_z
+        merged_diag = math.sqrt(dx * dx + dy * dy + dz * dz)
+        for m in leaves:
+            m.bbox_diagonal_cm_merged = merged_diag
 
     measurements.sort(key=lambda m: m.bbox_diagonal_cm)
 
