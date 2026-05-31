@@ -530,6 +530,11 @@ def _write_small_parts_csv(
             "override_status: no_slot|slot_empty|has_override (3-value enum, "
             "see docs/concepts/material_analysis_c1yc_2_mcm.md Section 8).\n"
         )
+        f.write(
+            "# bbox_diagonal_cm_merged: Phase 2 backlog #3 — multi-leaf "
+            "AABB union diagonal. Single-leaf은 self diagonal. is_small "
+            "판정은 기존 bbox_diagonal_cm 유지 (surfacing only).\n"
+        )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
@@ -542,12 +547,16 @@ def _write_small_parts_csv(
             "bbox_y_cm",
             "bbox_z_cm",
             "bbox_diagonal_cm",
+            "bbox_diagonal_cm_merged",  # Phase 2 backlog #3 — multi-leaf AABB union (single-leaf은 self)
             "bbox_max_edge_cm",
             "bbox_volume_cm3",
             "mobility",
             "is_small",
             "parent_leaf_count",
             "is_multi_leaf",
+            "bbox_origin_x_cm",       # Phase 2 backlog #3 — world center
+            "bbox_origin_y_cm",
+            "bbox_origin_z_cm",
             "material_count",        # F6 — 박제: docs/concepts/material_analysis_c1yc_2_mcm.md
             "override_status",       # F6
             "material_path_top1",    # F6
@@ -567,12 +576,16 @@ def _write_small_parts_csv(
                 f"{m.bbox_y_cm:.3f}",
                 f"{m.bbox_z_cm:.3f}",
                 f"{m.bbox_diagonal_cm:.3f}",
+                f"{m.bbox_diagonal_cm_merged:.3f}",
                 f"{m.bbox_max_edge_cm:.3f}",
                 f"{m.bbox_volume_cm3:.3f}",
                 m.mobility_name,
                 report.is_small(m),
                 m.parent_leaf_count,
                 m.is_multi_leaf,
+                f"{m.bbox_origin_x_cm:.3f}",
+                f"{m.bbox_origin_y_cm:.3f}",
+                f"{m.bbox_origin_z_cm:.3f}",
                 m.material_count,
                 m.override_status,
                 m.material_path_top1,
@@ -708,8 +721,12 @@ def _log_small_parts_summary(
     smallest = report.measurements[:10]
     if smallest:
         for i, m in enumerate(smallest, start=1):
+            # Multi-leaf 부품엔 합산 diagonal 같이 표시 (Phase 2 backlog #3).
+            # leaf bbox 와 차이가 클수록 multi-leaf 부품의 진짜 크기 정보.
             multi_tag = (
-                f"  multi={m.parent_leaf_count}" if m.is_multi_leaf else ""
+                f"  multi={m.parent_leaf_count}"
+                f" merged={m.bbox_diagonal_cm_merged:.2f}cm"
+                if m.is_multi_leaf else ""
             )
             lines.append(
                 f"    #{i:<2} {m.bbox_diagonal_cm:>6.2f}cm  "
