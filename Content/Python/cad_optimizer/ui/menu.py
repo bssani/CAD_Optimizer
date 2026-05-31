@@ -87,6 +87,24 @@ class CADOptimizerApplyMetadataTagsCommand(unreal.ToolMenuEntryScript):
         run_apply_metadata_tags()
 
 
+@unreal.uclass()
+class CADOptimizerMergeActorsDryRunCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_merge_actors_dry_run
+
+        run_merge_actors_dry_run()
+
+
+@unreal.uclass()
+class CADOptimizerMergeActorsApplyCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_merge_actors_apply
+
+        run_merge_actors_apply()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -160,6 +178,21 @@ def register_menu() -> None:
         tool_tip="F8: 4-tier metadata tag 부여 (CADOpt_F8_Cull_High/Mid/"
                  "Review/Keep). Phase 3 visibility culling 대비. "
                  "Level dirty — save 필요. Idempotent.",
+    )
+    _register(
+        CADOptimizerMergeActorsDryRunCommand(),
+        name="CADOptimizer.MergeActors.DryRun",
+        label="🔗 Merge Actors (Phase 2) — Dry Run",
+        tool_tip="Phase 2: F3 fresh run + plan-only ISM 변환 시뮬레이션. "
+                 "Level unchanged. Plan CSV 박제 (예상 drawcall 감소량 포함).",
+    )
+    _register(
+        CADOptimizerMergeActorsApplyCommand(),
+        name="CADOptimizer.MergeActors.Apply",
+        label="🔗 Merge Actors (Phase 2) — APPLY",
+        tool_tip="Phase 2: ISM 변환 실제 적용. BP_ISMHolder spawn + per-instance "
+                 "transform 부여 + source actor batch destroy. Level dirty — "
+                 "save 필요. Undo로 전체 revert. Dry Run 먼저 권장.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()

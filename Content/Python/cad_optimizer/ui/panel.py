@@ -1122,6 +1122,221 @@ def run_apply_metadata_tags() -> None:
     _print_f8_output_log(result)
 
 
+# ─── Phase 2: Actor Merger (ISM 변환) ───────────────────────────────
+
+
+# BP_ISMHolder asset path — verification에서 확정된 위치 (Project Content).
+# Plugin Content 이전은 Phase 2 backlog 항목 (plugin redistribute 대비).
+_BP_ISMHOLDER_PATH = "/Game/Blueprints/BP_ISMHolder.BP_ISMHolder"
+_BP_ISMHolder_CLASS = None  # caching after first successful load
+
+
+def _load_bp_ism_holder_class():
+    """BP_ISMHolder class load (cached after first call)."""
+    global _BP_ISMHolder_CLASS
+    if _BP_ISMHolder_CLASS is None:
+        cls = unreal.EditorAssetLibrary.load_blueprint_class(_BP_ISMHOLDER_PATH)
+        if cls is None:
+            raise RuntimeError(
+                f"BP_ISMHolder not found at '{_BP_ISMHOLDER_PATH}'. "
+                "Asset missing or path wrong. Required for Phase 2 actor merging."
+            )
+        _BP_ISMHolder_CLASS = cls
+    return _BP_ISMHolder_CLASS
+
+
+def _actor_location_tuple(actor) -> Tuple[float, float, float]:
+    """actor.get_actor_location() → (x, y, z). plan_merge 주입용."""
+    loc = actor.get_actor_location()
+    return (loc.x, loc.y, loc.z)
+
+
+def _actor_relative_transform(actor, pivot: Tuple[float, float, float]):
+    """Actor world transform → pivot-relative unreal.Transform.
+
+    ISMC.add_instance() 가 받는 좌표계 = holder actor 기준 local.
+    Holder가 pivot에 spawn 되므로 인스턴스 위치 = (actor_world - pivot).
+    Rotation/Scale은 actor 것 그대로 보존.
+    """
+    world_xform = actor.get_actor_transform()
+    world_loc = world_xform.translation
+    rel_loc = unreal.Vector(
+        world_loc.x - pivot[0],
+        world_loc.y - pivot[1],
+        world_loc.z - pivot[2],
+    )
+    return unreal.Transform(
+        location=rel_loc,
+        rotation=world_xform.rotation.rotator(),
+        scale=world_xform.scale3d,
+    )
+
+
+def _spawn_ism_holder(mesh_path: str, pivot: Tuple[float, float, float]):
+    """BP_ISMHolder spawn at pivot, set mesh. Returns (holder, ismc)."""
+    bp_class = _load_bp_ism_holder_class()
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    location = unreal.Vector(pivot[0], pivot[1], pivot[2])
+    holder = eas.spawn_actor_from_class(bp_class, location, unreal.Rotator())
+    if holder is None:
+        raise RuntimeError(f"BP_ISMHolder spawn failed at {pivot}")
+    ismc = holder.get_component_by_class(unreal.InstancedStaticMeshComponent)
+    if ismc is None:
+        eas.destroy_actor(holder)
+        raise RuntimeError(
+            "BP_ISMHolder lacks InstancedStaticMeshComponent (BP modified?)."
+        )
+    sm = unreal.EditorAssetLibrary.load_asset(mesh_path)
+    if sm is None:
+        eas.destroy_actor(holder)
+        raise RuntimeError(f"Static mesh asset not found: {mesh_path}")
+    ismc.set_static_mesh(sm)
+    return holder, ismc
+
+
+def _add_instances_to_ismc(ismc, transforms: List) -> int:
+    """Per-instance transform 일괄 추가. Returns added count."""
+    count = 0
+    for xform in transforms:
+        ismc.add_instance(xform)
+        count += 1
+    return count
+
+
+def _set_ismc_materials(ismc, material_paths: List[str]) -> None:
+    """Material override 설정. F3 grouping이 보장한 슬롯별 동일 path.
+
+    "None" / 빈 path = mesh default fallback (override 안 함).
+    """
+    for slot_idx, path in enumerate(material_paths):
+        if not path or path == "None":
+            continue
+        mat = unreal.EditorAssetLibrary.load_asset(path)
+        if mat is not None:
+            ismc.set_material(slot_idx, mat)
+
+
+def _destroy_source_actors(actors: List) -> None:
+    """Source actor batch destroy (single transaction if API supports)."""
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    if hasattr(eas, "destroy_actors"):
+        eas.destroy_actors(actors)
+    else:
+        for a in actors:
+            eas.destroy_actor(a)
+
+
+def _tag_holder_actor(actor, mesh_hash: str, count: int) -> None:
+    """Sentinel tag + outliner label (박제/감사용, idempotent 아님)."""
+    actor.tags = [
+        unreal.Name(f"CADOpt_P2_Merged_{mesh_hash}"),
+        unreal.Name(f"CADOpt_P2_SourceCount_{count}"),
+    ]
+    actor.set_actor_label(f"CADOpt_P2_ISM_{mesh_hash}_{count}")
+
+
+def _make_actor_merger_csv_path(suffix: str) -> str:
+    """`Saved/CAD_Optimizer/actor_merge_{suffix}_{ts}.csv`."""
+    saved_dir = unreal.Paths.project_saved_dir()
+    out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+    os.makedirs(out_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(out_dir, f"actor_merge_{suffix}_{ts}.csv")
+
+
+def _run_actor_merger(dry_run: bool) -> None:
+    """F3 fresh run → plan_merge → apply_merge_plans. dry_run flag로 분기."""
+    from cad_optimizer.actor_merger import (
+        DEFAULT_MERGE_THRESHOLD,
+        apply_merge_plans,
+        plan_merge,
+    )
+
+    mode_str = "Dry Run" if dry_run else "APPLY"
+    unreal.log("=" * 60)
+    unreal.log(f"[CAD_Optimizer Phase 2] Actor Merger — {mode_str}")
+    unreal.log("=" * 60)
+
+    # F3 fresh run (in-memory). Threshold = DEFAULT_MERGE_THRESHOLD 일관.
+    f3_report = run_detect_instances(threshold=DEFAULT_MERGE_THRESHOLD)
+
+    plans = plan_merge(
+        f3_report,
+        threshold=DEFAULT_MERGE_THRESHOLD,
+        actor_location_fn=_actor_location_tuple,
+        actor_relative_transform_fn=_actor_relative_transform,
+    )
+
+    if not plans:
+        unreal.log_warning(
+            f"[Phase 2] No merge candidates (threshold={DEFAULT_MERGE_THRESHOLD}). "
+            "F3 candidate_groups empty (or all groups already merged)."
+        )
+        return
+
+    suffix = "dryrun" if dry_run else "applied"
+    csv_path = _make_actor_merger_csv_path(suffix)
+    total = len(plans)
+
+    with unreal.ScopedSlowTask(total, f"Actor Merge ({mode_str})") as slow_task:
+        slow_task.make_dialog(True)
+
+        def _progress_adapter(current: int, total_: int, msg: str) -> bool:
+            slow_task.enter_progress_frame(1, msg)
+            return not bool(slow_task.should_cancel())
+
+        # Mutation callable 주입 — dry-run 시 None (apply_merge_plans 내부에서 skip).
+        result = apply_merge_plans(
+            plans,
+            dry_run=dry_run,
+            csv_out_path=csv_path,
+            progress_callback=_progress_adapter,
+            plugin_commit="(see git log)",
+            spawn_ism_holder_fn=None if dry_run else _spawn_ism_holder,
+            add_instances_to_ismc_fn=None if dry_run else _add_instances_to_ismc,
+            set_ismc_material_fn=None if dry_run else _set_ismc_materials,
+            destroy_actor_fn=None if dry_run else _destroy_source_actors,
+            tag_actor_fn=None if dry_run else _tag_holder_actor,
+        )
+
+    unreal.log(f"[Phase 2] Plans total: {result.plans_total}")
+    unreal.log(f"[Phase 2] Plans applied: {result.plans_applied}")
+    unreal.log(f"[Phase 2] Plans skipped: {result.plans_skipped}")
+    unreal.log(f"[Phase 2] Instances merged: {result.instances_merged}")
+    unreal.log(
+        f"[Phase 2] Est. drawcall reduction: "
+        f"{result.estimated_drawcall_reduction}"
+    )
+    if not dry_run:
+        unreal.log(f"[Phase 2] Source actors deleted: {result.actors_deleted}")
+        unreal.log_warning(
+            "[Phase 2] Level dirty — review and save manually. "
+            "Undo (Ctrl+Z) reverts the entire merge."
+        )
+    unreal.log(f"[Phase 2] CSV: {result.csv_path}")
+    unreal.log("=" * 60)
+
+
+def run_merge_actors_dry_run() -> None:
+    """Phase 2 entry — dry-run. F3 fresh run + plan CSV + log. Level unchanged."""
+    _run_actor_merger(dry_run=True)
+
+
+def run_merge_actors_apply() -> None:
+    """Phase 2 entry — REAL APPLY. Level mutation.
+
+    각 F3 candidate group마다:
+        1. BP_ISMHolder spawn (pivot = group centroid)
+        2. ISMC에 mesh + materials + per-instance transform 설정
+        3. Sentinel tag 부여 (감사/박제용)
+        4. Source actor batch destroy
+
+    Level dirty. Save 필요. Undo로 전체 revert 가능.
+    Idempotent — 재실행 시 머지된 ISM holder는 F3 스캔 skip (자연 idempotent).
+    """
+    _run_actor_merger(dry_run=False)
+
+
 # ─── Widget helper plumbing (shared by F2) ──────────────────────────
 
 
