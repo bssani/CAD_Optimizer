@@ -43,23 +43,23 @@
 
 ---
 
-## 3. F4 disjoint mesh — multi-leaf 부품 N leaf bbox 합산
+## 3. ✅ F4 multi-leaf 부품 AABB union 합산 (완료 2026-06-01)
 
-**출처**: F4 spec (`small_part_detector.py` docstring), `docs/measurements/f4_c1yc_2_mcm.md`
+**출처**: F4 spec, `docs/measurements/f4_c1yc_2_mcm.md` §5.1
 
-**발견 정황**:
-- C1YC_2_MCM에서 multi-leaf (한 부품이 N leaf로 split) 비율 약 9.4%
-- 현재는 `is_multi_leaf` 플래그로 surfacing만 하고 측정은 leaf 단위 — disjoint 부품의 한쪽만 작아도 small part로 잘못 분류 가능
-- VALVE_ASM 케이스가 smallest top 1, 2에 떴음 (multi=2)
+**해결 (옵션 A — surfacing only)**:
+- `SmallPartMeasurement` 4 field 추가: `bbox_origin_x/y/z_cm`, `bbox_diagonal_cm_merged`
+- Pass 3 신규: parent 그룹별 AABB union → merged diagonal (single-leaf은 self)
+- CSV 컬럼 4개 + Output Log smallest 10에 `merged=N.NNcm` 표시
+- **small 판정은 기존 leaf 기준 유지** — 박제 회귀 0
 
-**미룬 이유**:
-- 합산 정의 모호 (axis-aligned union? oriented? convex hull?). 단순 union은 거대 bbox 양산 → false positive
-- Phase 1 = detection only 원칙. 합산은 actor 의미 변경 (둘을 한 단위로 봄) — measurement가 아니라 modeling 결정
+**C1YC_2_MCM 실측**:
+- VALVE_ASM #1, #2 merged = **2.46cm** (leaf 0.001cm collapsed)
+- → multi-leaf 부품의 진짜 PCVR 가시 크기 정보 확보
 
-**Phase 2 액션**:
-- 합산 알고리즘 결정 (axis-aligned union 우선 권장 — 단순)
-- 합산 bbox와 leaf bbox 둘 다 CSV에 박제 (사용자가 비교 가능)
-- false positive/negative 비율 재측정
+**잔여 (선택, 다음 cycle)**:
+- 판정을 merged 기준으로 전환 (옵션 B) — F4/F5/F7/F8 박제 광범위 갱신 동반
+- OBB / Convex hull 합산 (옵션 b/c) — 외부 라이브러리 정책 결정 시점
 
 ---
 

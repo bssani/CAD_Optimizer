@@ -83,6 +83,26 @@ Output Log 표시 기준 (diagonal은 2-decimal 반올림). 정확한 mm-단위 
 높음 — "smallest 부품일수록 multi-leaf 비율 높을 수 있다"는 가설 신호. 다음 차량
 측정 시 이 비율이 비슷하게 나오는지가 가설 강화/약화 신호.
 
+### 5.1 Multi-leaf AABB union merged diagonal (Phase 2 backlog #3, 2026-06-01)
+
+옵션 A (surfacing only, small 판정은 leaf 유지) 첫 iteration 실측:
+
+| Rank | leaf diagonal | parent | merged diagonal | 해석 |
+|------|--------------|--------|------------------|------|
+| #1 | 0.001cm (Output Log 0.00cm) | VALVE_ASM_600913 | **2.46cm** | leaf는 collapsed (단축), VALVE 부품 진짜 크기 ~2.46cm |
+| #2 | 0.001cm | VALVE_ASM_600254 | **2.46cm** | 동일 |
+| #3~#10 | 0.00cm | LATCH/SHUTTER (single-leaf) | (merged = self) | multi-leaf 아님 |
+
+**가설**:
+- VALVE_ASM 부품엔 collapsed actor (한 축 0.001cm) 가 부착됨 (구조/기하학적 마커?)
+- 진짜 부품 크기는 2.46cm
+- 옵션 B (판정 = merged) 적용 시 #1, #2 가 small에서 빠짐 (0.5cm 초과)
+
+**Backlog 연결**:
+- #3 ✅ 본 박제 patch (merged metric surfacing)
+- #4 (zero-bbox epsilon): leaf 0.001cm 한 축 collapsed → 정책 결정 입력
+- #5 (collapsed actor 정책): VALVE_ASM에 collapsed 부착 — CAD 팀 확인 후보
+
 ## 6. 진단 신호로서의 0.00cm
 
 Smallest 10의 #1~#10 모두 Output Log에서 ~0.00 cm로 표시 (CSV 3-decimal에선
