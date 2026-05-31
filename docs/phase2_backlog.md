@@ -180,17 +180,15 @@
 
 ---
 
-## 10. (선택) APPLY 후 F3 candidate=0 명시적 검증
+## 10. ✅ APPLY 후 F3 candidate=0 명시적 검증 (완료 2026-06-01)
 
-**출처**: Phase 2 박제 § 4 (`docs/measurements/actor_merging_c1yc_2_mcm.md`)
+**출처**: Phase 2 박제 § 4
 
-**발견 정황**:
-- 자연 idempotent는 로직상 보장 (`unreal.Actor` 가 F3 스캔 skip)
-- C1YC_2_MCM에선 APPLY 직후 F3 fresh run 안 함 → 실측 미확보
-
-**Phase 2 액션 (낮음 우선순위)**:
-- 다음 차량 측정 시 APPLY 직후 F3 fresh run 추가
-- candidate=0 또는 매우 감소된 카운트 확인 후 박제
+**해결**:
+- BP relocate PR Dry Run 실행 시 자연스럽게 검증됨
+- Pre-APPLY: 28,271 groups, **303 candidates**, est. reduction 6,196
+- Post-APPLY: 27,968 groups, **0 candidates**, est. reduction 0
+- → 자연 idempotent 실측 PASS. 박제 § 4 갱신.
 
 ---
 
