@@ -11,7 +11,7 @@
 | 프로젝트 경로 | `C:\Users\BZLS01\Downloads\C1YC_2_MCM` |
 | 레벨 | `L_C1YC_2_MCM` |
 | Plugin commit | `4ab31ca` (Phase 2 actor merger squash) |
-| BP asset | `/Game/Blueprints/BP_ISMHolder` (Project Content, **Plugin 이전 필요** — backlog #8) |
+| BP asset | `/CAD_Optimizer/Blueprints/BP_ISMHolder` (Plugin Content — backlog #8 완료, 2026-06-01) |
 | Threshold | ≥ 10 instances per group (F3 candidate threshold) |
 | Tag prefix | `CADOpt_P2_` |
 

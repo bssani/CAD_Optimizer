@@ -139,32 +139,18 @@
 
 ---
 
-## 8. BP_ISMHolder → Plugin Content 이전
+## 8. ✅ BP_ISMHolder → Plugin Content 이전 (완료 2026-06-01)
 
 **출처**: Phase 2 actor merger 구현 (`docs/measurements/actor_merging_c1yc_2_mcm.md` § 5.4)
 
-**발견 정황**:
-- UE 5.5 Python에서 `unreal.Actor` 에 dynamic component 부착 메서드 없음
-- 우회로 BP_ISMHolder template (Actor + ISMC default component) 채택
-- 현재 위치: `/Game/Blueprints/BP_ISMHolder` (**Project Content**)
-- `panel.py:_BP_ISMHOLDER_PATH` hardcoded
+**해결**:
+- BP 이전: `/Game/Blueprints/BP_ISMHolder` → `/CAD_Optimizer/Blueprints/BP_ISMHolder` (Plugin Content)
+- `panel.py:_BP_ISMHOLDER_PATH` 갱신
+- Plugin redistribute 시 .uasset 동봉됨 → 다른 project에서 즉시 사용 가능
+- Project Content (`/Game/`) 의 기존 reference는 사용자가 UE Editor에서 직접 Move (auto fix-up)
 
-**문제**:
-- Plugin 단독 redistribute 시 BP asset 누락 → `_load_bp_ism_holder_class` 가
-  `RuntimeError` raise
-- 다른 project에서 plugin install 시 actor merging 메뉴 실행 불가
-
-**미룬 이유**:
-- C1YC_2_MCM single-vehicle 검증 우선
-- Plugin Content 이전 = .uasset 파일 이동 + path 갱신 + 다른 project에서
-  smoke test 필요
-
-**Phase 2 액션**:
-- BP 위치 이전: `Content/CAD_Optimizer/Blueprints/BP_ISMHolder.uasset`
-  (또는 `Content/Blueprints/` — plugin Content root 구조 결정)
-- `panel.py:_BP_ISMHOLDER_PATH` → `/CAD_Optimizer/Blueprints/BP_ISMHolder`
-- 다른 빈 project에서 plugin install 후 smoke test
-- 기존 Project Content BP 삭제 (deprecated 표시 후 다음 cleanup PR)
+**잔여 (선택)**:
+- 다른 빈 project에서 plugin install 후 smoke test (single vehicle 검증으로 충분, redistribute 직전 검토)
 
 ---
 

@@ -1125,9 +1125,10 @@ def run_apply_metadata_tags() -> None:
 # ─── Phase 2: Actor Merger (ISM 변환) ───────────────────────────────
 
 
-# BP_ISMHolder asset path — verification에서 확정된 위치 (Project Content).
-# Plugin Content 이전은 Phase 2 backlog 항목 (plugin redistribute 대비).
-_BP_ISMHOLDER_PATH = "/Game/Blueprints/BP_ISMHolder.BP_ISMHolder"
+# BP_ISMHolder asset path — Plugin Content (`/CAD_Optimizer/` mount root).
+# Plugin redistribute 시 .uasset 동봉되어 다른 project 에서도 즉시 사용 가능.
+# 이전 (Phase 2 backlog #8): /Game/Blueprints/ (Project Content) → 현재 위치.
+_BP_ISMHOLDER_PATH = "/CAD_Optimizer/Blueprints/BP_ISMHolder.BP_ISMHolder"
 _BP_ISMHolder_CLASS = None  # caching after first successful load
 
 # World Outliner folder — ISM holder 303+ 가 root-level에 흩어져 outliner 폭발하는
