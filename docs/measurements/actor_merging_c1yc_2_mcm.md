@@ -95,14 +95,30 @@ LogMaterial: Display: Material /Game/00_PQDQ/01_Features/MI_SectionMisc.MI_Secti
 
 → ISM 사용 시 material asset에 `bUsedWithInstancedStaticMeshes` flag 자동 추가. **Material asset dirty** (save 시 변경 발생). 의도된 UE 동작 — error 아님.
 
-### 5.2 F2 통계 한계 (Phase 2 backlog 후보)
+### 5.2 ✅ F2 통계 보강 (backlog #9 완료, 2026-06-01)
 
-`stats.py` 의 `_is_static_mesh_actor` 체크가 `isinstance(actor, StaticMeshActor)` 기반.
-BP_ISMHolder (parent=`unreal.Actor`) 의 ISMC는 카운트에서 제외 → **F2 단독으로는
-실제 drawcall 추적 불가**. 본 박제처럼 외부 산술 (F2 sections + ISM holder count)
-필요.
+원래 한계: `stats.py` 의 `_is_static_mesh_actor` 체크가
+`isinstance(actor, StaticMeshActor)` 기반이라 BP_ISMHolder
+(parent=`unreal.Actor`) 의 ISMC가 카운트 제외 → F2 단독으로 실제 drawcall
+추적 불가.
 
-→ Phase 2 backlog #9 (F2 보강: ISM section 통합 카운트) 추가.
+해결 (Phase 2 backlog #9):
+- `MeshStatsReport` 3 field 추가: `ism_holder_actor_count`,
+  `ism_total_instances`, `ism_material_sections`
+- `collect_mesh_stats` non-SMA branch에서 ISMC 측정
+- `panel.py:_log_report` 에 ISM block + `Real Drawcall (SMA+ISM)` 통합 행
+
+실측 (C1YC_2_MCM 머지 후 F2):
+```
+Material Sections:       39,310   (SMA)
+ISM Holders:                303
+ISM Instances (sum):      6,499
+ISM Material Sections:      303
+Real Drawcall (SMA+ISM): 39,613
+```
+
+Cross-check: Pre-APPLY F2 (45,809 sections) − Real Drawcall (39,613)
+= **6,196** = Phase 2 estimated drawcall reduction byte 일치 ✅
 
 ### 5.3 Nanite warning (Phase 1부터 존재, ISM 영향 아님)
 
