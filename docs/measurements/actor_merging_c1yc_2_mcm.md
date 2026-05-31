@@ -11,7 +11,7 @@
 | 프로젝트 경로 | `C:\Users\BZLS01\Downloads\C1YC_2_MCM` |
 | 레벨 | `L_C1YC_2_MCM` |
 | Plugin commit | `4ab31ca` (Phase 2 actor merger squash) |
-| BP asset | `/Game/Blueprints/BP_ISMHolder` (Project Content, **Plugin 이전 필요** — backlog #8) |
+| BP asset | `/CAD_Optimizer/Blueprints/BP_ISMHolder` (Plugin Content — backlog #8 완료, 2026-06-01) |
 | Threshold | ≥ 10 instances per group (F3 candidate threshold) |
 | Tag prefix | `CADOpt_P2_` |
 
@@ -68,15 +68,20 @@ F3 estimated_drawcall_reduction = 6,196   ✅ byte 단위 일치
 - `sum(count - 1) = 6,196` (= 6,499 − 303)
 - `num_materials = 1` per group (F3 grouping이 보장, F2 박제 5 unique materials 중 Top 1 MI_SectionMisc 99.3% 점유와 정합)
 
-## 4. 자연 idempotent 검증 (실측)
+## 4. 자연 idempotent 검증 (실측 PASS — 2026-06-01)
 
-APPLY 직후 F3 fresh run 결과:
-- Scanned: 107,883 actors (45,810 StaticMeshActor, 62,073 other) ← Total actor 거의 동일 (ISM holder 303 추가, SMA 6,499 삭제 → net −6,196 + APPLY 전 +0 + 자잘한 차이)
-- **Groups: 28,271 unique (threshold=10, 303 candidates)** ← Pre-APPLY와 같은 candidate 카운트... 의문
+APPLY 후 Dry Run으로 F3 fresh run 실측 결과:
 
-(참고: 로그상 F3 instance detection은 **APPLY 전** F2 측정 직후 실행됐고, candidate가 303으로 잡힌 시점은 머지 직전. APPLY 이후 별도 F3 fresh run을 실행하지 않았으므로 자연 idempotent는 **로직상 보장** + **재실행 미실측** 상태. 다음 차량 측정 시 재실행으로 candidate=0 확인 권장.)
+| 항목 | 값 | 의미 |
+|------|-----|------|
+| Total scanned | 101,687 actors (39,311 SMA + 62,376 other) | = 107,883 − 6,499 (delete) + 303 (holder) ✅ |
+| Groups (unique mesh+mat+mobility) | 27,968 | Pre-APPLY 28,271 에서 303 감소 |
+| **Candidates (count ≥ 10)** | **0** ✅ | 자연 idempotent 실측 PASS |
+| Est. drawcall reduction | 0 | 재실행해도 머지할 게 없음 |
 
-→ Phase 2 backlog #11 (선택) — APPLY 후 F3 fresh run으로 candidate=0 명시적 측정.
+→ 머지된 303 group의 source actor가 사라지고 BP_ISMHolder 303개는
+`unreal.Actor` 라 F3 스캔에서 skip. **재실행해도 candidate=0** =
+backlog #10 자연 idempotent 명시적 검증 완료.
 
 ## 5. 발견 사항
 
@@ -150,7 +155,7 @@ P2_UNIQUE_MATERIALS_AFTER = 5           # 0 변동
 P2_NANITE_RATIO_BEFORE = 0.99956        # 45789 / 45809
 P2_NANITE_RATIO_AFTER = 0.99949         # 39290 / 39310 (ISM holder 제외)
 
-P2_NATURAL_IDEMPOTENT_VERIFIED = PARTIAL  # 로직상 보장, 재실행 미실측
+P2_NATURAL_IDEMPOTENT_VERIFIED = TRUE     # APPLY 후 Dry Run candidate=0 실측 (2026-06-01)
 P2_MATERIAL_FLAG_AUTO_SET = TRUE          # MI_SectionMisc bUsedWithInstancedStaticMeshes
 ```
 
