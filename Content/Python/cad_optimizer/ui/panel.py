@@ -1130,6 +1130,11 @@ def run_apply_metadata_tags() -> None:
 _BP_ISMHOLDER_PATH = "/Game/Blueprints/BP_ISMHolder.BP_ISMHolder"
 _BP_ISMHolder_CLASS = None  # caching after first successful load
 
+# World Outliner folder — ISM holder 303+ 가 root-level에 흩어져 outliner 폭발하는
+# 문제 해결. CAD hierarchy (머지되지 않은 SMA) 는 그대로 유지; ISM holder만 별도
+# folder로 grouping. C1YC_2_MCM 박제 §5 (사용성 한계) 대응.
+_ISM_FOLDER_PATH = "ISM_Merged"
+
 
 def _load_bp_ism_holder_class():
     """BP_ISMHolder class load (cached after first call)."""
@@ -1227,12 +1232,18 @@ def _destroy_source_actors(actors: List) -> None:
 
 
 def _tag_holder_actor(actor, mesh_hash: str, count: int) -> None:
-    """Sentinel tag + outliner label (박제/감사용, idempotent 아님)."""
+    """Sentinel tag + outliner label + folder path. Idempotent 아님.
+
+    Folder는 outliner root-level 폭발 회피 (303+ holder가 평탄 흩어짐).
+    CAD hierarchy는 머지되지 않은 SMA에서 보존됨; ISM holder는 별도 folder
+    안에서 grouping.
+    """
     actor.tags = [
         unreal.Name(f"CADOpt_P2_Merged_{mesh_hash}"),
         unreal.Name(f"CADOpt_P2_SourceCount_{count}"),
     ]
     actor.set_actor_label(f"CADOpt_P2_ISM_{mesh_hash}_{count}")
+    actor.set_folder_path(unreal.Name(_ISM_FOLDER_PATH))
 
 
 def _make_actor_merger_csv_path(suffix: str) -> str:
@@ -1328,13 +1339,69 @@ def run_merge_actors_apply() -> None:
     각 F3 candidate group마다:
         1. BP_ISMHolder spawn (pivot = group centroid)
         2. ISMC에 mesh + materials + per-instance transform 설정
-        3. Sentinel tag 부여 (감사/박제용)
+        3. Sentinel tag + outliner label + ISM_Merged folder 부여
         4. Source actor batch destroy
 
     Level dirty. Save 필요. Undo로 전체 revert 가능.
     Idempotent — 재실행 시 머지된 ISM holder는 F3 스캔 skip (자연 idempotent).
     """
     _run_actor_merger(dry_run=False)
+
+
+def run_organize_ism_holders() -> None:
+    """Phase 2 cleanup — 기존 BP_ISMHolder들을 ``ISM_Merged/`` folder로 일괄 이동.
+
+    Use case:
+    - 이전 코드 버전 (folder 설정 없이) APPLY로 생성된 holder 정리
+    - 또는 사용자가 outliner에서 수동으로 옮겼다가 되돌릴 때
+
+    대상: ``CADOpt_P2_Merged_*`` tag 보유 actor 만 (BP_ISMHolder 표식).
+    Idempotent — 이미 folder 안에 있으면 skip + 카운트만.
+    """
+    unreal.log("=" * 60)
+    unreal.log(
+        f"[CAD_Optimizer Phase 2] Organize ISM Holders → {_ISM_FOLDER_PATH}/"
+    )
+    unreal.log("=" * 60)
+
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    all_actors = list(eas.get_all_level_actors())
+    target = unreal.Name(_ISM_FOLDER_PATH)
+    moved = 0
+    already = 0
+    not_holder = 0
+
+    for actor in all_actors:
+        try:
+            tags = list(actor.tags)
+        except Exception:
+            continue
+        if not any(str(t).startswith("CADOpt_P2_Merged_") for t in tags):
+            not_holder += 1
+            continue
+
+        try:
+            current = str(actor.get_folder_path())
+        except Exception:
+            current = ""
+        if current == _ISM_FOLDER_PATH:
+            already += 1
+            continue
+
+        try:
+            actor.set_folder_path(target)
+            moved += 1
+        except Exception:
+            continue
+
+    unreal.log(f"[Phase 2] ISM holders moved: {moved}")
+    unreal.log(f"[Phase 2] Already in folder: {already}")
+    unreal.log(f"[Phase 2] Non-holder actors: {not_holder}")
+    if moved > 0:
+        unreal.log_warning(
+            "[Phase 2] Level dirty — save 필요."
+        )
+    unreal.log("=" * 60)
 
 
 # ─── Widget helper plumbing (shared by F2) ──────────────────────────
