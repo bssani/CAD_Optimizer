@@ -175,6 +175,15 @@ def _log_report(report: MeshStatsReport, skip_hidden: bool) -> None:
         f"Unique Static Meshes:  {report.unique_static_meshes:,}",
         f"Nanite-Enabled Actors: {report.nanite_enabled_actors:,} / {report.actor_count:,}",
     ]
+    # Phase 2 backlog #9 — ISM holder 가 있을 때만 별도 block 추가.
+    if report.ism_holder_actor_count > 0:
+        real_drawcall = report.total_primitives + report.ism_material_sections
+        lines.extend([
+            f"ISM Holders:           {report.ism_holder_actor_count:,}",
+            f"ISM Instances (sum):   {report.ism_total_instances:,}",
+            f"ISM Material Sections: {report.ism_material_sections:,}",
+            f"Real Drawcall (SMA+ISM): {real_drawcall:,}",
+        ])
     if skip_hidden:
         lines.append(f"Hidden Skipped:        {report.skipped_hidden_count:,}")
     if report.scanned_at:

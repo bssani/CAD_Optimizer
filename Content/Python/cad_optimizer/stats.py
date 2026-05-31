@@ -35,6 +35,12 @@ class MeshStatsReport:
     unique_static_meshes: int = 0
     nanite_enabled_actors: int = 0
     skipped_hidden_count: int = 0
+    # ISM holder counters (Phase 2 backlog #9). actor_count / total_primitives
+    # 등은 StaticMeshActor 만이라 ISM holder (unreal.Actor + ISMC) 는 별도
+    # 카운트. 실 drawcall ≈ total_primitives + ism_material_sections.
+    ism_holder_actor_count: int = 0
+    ism_total_instances: int = 0
+    ism_material_sections: int = 0
     scanned_at: Optional[datetime] = None
     cancelled: bool = False
 
@@ -93,6 +99,18 @@ def _iter_material_paths(sm) -> Iterable[Optional[str]]:
         yield None if mat is None else mat.get_path_name()
 
 
+def _get_ism_component(actor):
+    """Actor 의 첫 ``InstancedStaticMeshComponent``. 없으면 ``None``.
+
+    BP_ISMHolder (Phase 2 actor merger 산출물) 가 대표 사용 케이스.
+    Phase 2 sentinel tag 의존성 없이 ISM 일반화 카운트.
+    """
+    try:
+        return actor.get_component_by_class(unreal.InstancedStaticMeshComponent)
+    except Exception:
+        return None
+
+
 # ─── Public API ─────────────────────────────────────────────────────
 
 
@@ -123,6 +141,21 @@ def collect_mesh_stats(
             break
 
         if not _is_static_mesh_actor(actor):
+            # Phase 2 backlog #9: ISM holder 카운트 (BP_ISMHolder 등).
+            # SMA isinstance에는 안 잡히지만 drawcall 기여하므로 별도 집계.
+            ismc = _get_ism_component(actor)
+            if ismc is not None:
+                report.ism_holder_actor_count += 1
+                try:
+                    report.ism_total_instances += ismc.get_instance_count()
+                except Exception:
+                    pass
+                ism_sm = ismc.static_mesh
+                if ism_sm is not None:
+                    try:
+                        report.ism_material_sections += ism_sm.get_num_sections(0)
+                    except Exception:
+                        pass
             on_progress()
             continue
 
