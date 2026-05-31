@@ -154,29 +154,19 @@
 
 ---
 
-## 9. F2 보강 — ISM section 통합 카운트
+## 9. ✅ F2 보강 — ISM section 통합 카운트 (완료 2026-06-01)
 
-**출처**: Phase 2 actor merger 박제 (`docs/measurements/actor_merging_c1yc_2_mcm.md` § 5.2)
+**출처**: Phase 2 actor merger 박제 §5.2
 
-**발견 정황**:
-- F2 (`stats.py`) 의 `_is_static_mesh_actor` = `isinstance(actor, StaticMeshActor)`
-- BP_ISMHolder (parent=`unreal.Actor`) 의 ISMC는 F2 카운트에서 제외
-- → F2 단독으로 실제 drawcall 추적 불가. 본 박제처럼 외부 산술 (F2 sections +
-  ISM holder count) 필요
+**해결**:
+- `MeshStatsReport` 3 field 추가:
+  - `ism_holder_actor_count`
+  - `ism_total_instances`
+  - `ism_material_sections`
+- `collect_mesh_stats` non-SMA branch에서 ISMC 측정 (Phase 2 sentinel tag 의존성 없음)
+- `panel.py:_log_report` 에 ISM block + `Real Drawcall (SMA+ISM)` 통합 행
 
-**미룬 이유**:
-- 박제는 수동 산술로 충분 (303 ISM holder 카운트는 Phase 2 apply 로그에서)
-- F2 보강은 Phase 1 코드 변경 → 회귀 위험. 단일 차종 검증으로 보강 우선순위 낮음
-
-**Phase 2 액션**:
-- F2 confirm한 후 보강:
-  - `unreal.Actor` 중 `InstancedStaticMeshComponent` 보유한 것 카운트
-  - per-instance count 합산 → `ism_total_instances` field 신규
-  - `ism_actor_count` field 신규
-  - drawcall 추정 = sections (SMA) + ism_actor_count (각 ISMC 1 drawcall per
-    material)
-- 또는 F2 별도 보존, Phase 2 전용 `drawcall_audit.py` 신설 (F2 변경 0)
-- 결정: 다음 차량 측정 후 (F2 보강 필요성 판단)
+**실측 검증 (C1YC_2_MCM 머지 후)**: Real Drawcall = 39,613 → Pre-APPLY 45,809 − 39,613 = 6,196 (Phase 2 estimated 일치). 박제 §5.2 갱신.
 
 ---
 
