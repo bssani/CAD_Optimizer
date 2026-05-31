@@ -136,3 +136,87 @@
 - 변동 있음 → BRACKET 전용 threshold (예: 2cm) 도입 검토, 또는 BRACKET을 별도 tier로 분리
 
 **관련 backlog**: 본 항목 + #6 (다음 차량 측정)이 동반 진행
+
+---
+
+## 8. BP_ISMHolder → Plugin Content 이전
+
+**출처**: Phase 2 actor merger 구현 (`docs/measurements/actor_merging_c1yc_2_mcm.md` § 5.4)
+
+**발견 정황**:
+- UE 5.5 Python에서 `unreal.Actor` 에 dynamic component 부착 메서드 없음
+- 우회로 BP_ISMHolder template (Actor + ISMC default component) 채택
+- 현재 위치: `/Game/Blueprints/BP_ISMHolder` (**Project Content**)
+- `panel.py:_BP_ISMHOLDER_PATH` hardcoded
+
+**문제**:
+- Plugin 단독 redistribute 시 BP asset 누락 → `_load_bp_ism_holder_class` 가
+  `RuntimeError` raise
+- 다른 project에서 plugin install 시 actor merging 메뉴 실행 불가
+
+**미룬 이유**:
+- C1YC_2_MCM single-vehicle 검증 우선
+- Plugin Content 이전 = .uasset 파일 이동 + path 갱신 + 다른 project에서
+  smoke test 필요
+
+**Phase 2 액션**:
+- BP 위치 이전: `Content/CAD_Optimizer/Blueprints/BP_ISMHolder.uasset`
+  (또는 `Content/Blueprints/` — plugin Content root 구조 결정)
+- `panel.py:_BP_ISMHOLDER_PATH` → `/CAD_Optimizer/Blueprints/BP_ISMHolder`
+- 다른 빈 project에서 plugin install 후 smoke test
+- 기존 Project Content BP 삭제 (deprecated 표시 후 다음 cleanup PR)
+
+---
+
+## 9. F2 보강 — ISM section 통합 카운트
+
+**출처**: Phase 2 actor merger 박제 (`docs/measurements/actor_merging_c1yc_2_mcm.md` § 5.2)
+
+**발견 정황**:
+- F2 (`stats.py`) 의 `_is_static_mesh_actor` = `isinstance(actor, StaticMeshActor)`
+- BP_ISMHolder (parent=`unreal.Actor`) 의 ISMC는 F2 카운트에서 제외
+- → F2 단독으로 실제 drawcall 추적 불가. 본 박제처럼 외부 산술 (F2 sections +
+  ISM holder count) 필요
+
+**미룬 이유**:
+- 박제는 수동 산술로 충분 (303 ISM holder 카운트는 Phase 2 apply 로그에서)
+- F2 보강은 Phase 1 코드 변경 → 회귀 위험. 단일 차종 검증으로 보강 우선순위 낮음
+
+**Phase 2 액션**:
+- F2 confirm한 후 보강:
+  - `unreal.Actor` 중 `InstancedStaticMeshComponent` 보유한 것 카운트
+  - per-instance count 합산 → `ism_total_instances` field 신규
+  - `ism_actor_count` field 신규
+  - drawcall 추정 = sections (SMA) + ism_actor_count (각 ISMC 1 drawcall per
+    material)
+- 또는 F2 별도 보존, Phase 2 전용 `drawcall_audit.py` 신설 (F2 변경 0)
+- 결정: 다음 차량 측정 후 (F2 보강 필요성 판단)
+
+---
+
+## 10. (선택) APPLY 후 F3 candidate=0 명시적 검증
+
+**출처**: Phase 2 박제 § 4 (`docs/measurements/actor_merging_c1yc_2_mcm.md`)
+
+**발견 정황**:
+- 자연 idempotent는 로직상 보장 (`unreal.Actor` 가 F3 스캔 skip)
+- C1YC_2_MCM에선 APPLY 직후 F3 fresh run 안 함 → 실측 미확보
+
+**Phase 2 액션 (낮음 우선순위)**:
+- 다음 차량 측정 시 APPLY 직후 F3 fresh run 추가
+- candidate=0 또는 매우 감소된 카운트 확인 후 박제
+
+---
+
+## 11. Actor merging multi-material slot 검증
+
+**출처**: Phase 2 박제 § 2
+
+**발견 정황**:
+- C1YC_2_MCM 303 candidate 모두 num_materials=1 (Top 1 MI_SectionMisc 99.3% 점유)
+- F3 `estimated_drawcall_reduction = sum((count-1) * num_materials)` 가 byte 일치
+- num_materials > 1 그룹에서 같은 식이 정확한지 미검증
+
+**Phase 2 액션**:
+- 다른 차종 (multi-section material 흔한 차종) 측정으로 multi-slot 검증
+- 불일치 시 식 보강 또는 grouping 정책 재검토
