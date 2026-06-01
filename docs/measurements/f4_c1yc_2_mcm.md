@@ -103,7 +103,7 @@ Output Log 표시 기준 (diagonal은 2-decimal 반올림). 정확한 mm-단위 
 - #4 (zero-bbox epsilon): leaf 0.001cm 한 축 collapsed → 정책 결정 입력
 - #5 (collapsed actor 정책): VALVE_ASM에 collapsed 부착 — CAD 팀 확인 후보
 
-## 6. 진단 신호로서의 0.00cm
+## 6. 진단 신호로서의 0.00cm — collapsed axis 박제 (Phase 2 backlog #4/#5, 2026-06-01)
 
 Smallest 10의 #1~#10 모두 Output Log에서 ~0.00 cm로 표시 (CSV 3-decimal에선
 0.001~0.010 cm 범위). Self-review #1 (한 축 collapsed actor)이 실제 surfacing됨.
@@ -113,6 +113,27 @@ zero-bbox 분기를 통과한 것은 의도된 동작:
 - `extent.x=0.001, y=0, z=0` → 측정됨, smallest로 분류
 
 PCVR cull 후보 1순위로 정확한 surfacing. **버그 아닌 진단 신호로 confirmed.**
+
+### 6.1 Collapsed axis 실측 (Phase 2 backlog #4/#5 close)
+
+Backlog #4 (epsilon) + #5 (정책) 묶음으로 진단 flag 도입:
+- 정의: half-extent < 0.005 cm = full extent < 0.01 cm 인 축이 1개 이상
+- 3축 모두 0 (`skipped_zero_bbox`) 와 구분
+- Measurement에 포함 (제외 안 함, 진단 신호 유지) + `is_collapsed_axis` flag + 별도 카운터
+
+**C1YC_2_MCM 실측 (2026-06-01)**:
+- `Collapsed axis (measured, diagnostic): **1,249** (전체 measured 45,809의 2.73%)`
+- Smallest 10 #1~#10 모두 `collapsed` 마커 (smallest 와 강한 상관)
+- 회귀 0: small@0.5cm = 7,138 / 분포 / NX / material 모두 동일 (surfacing only)
+
+**해석**:
+- 1,249개 = Datasmith CAD import의 BREP 면/선/점이 0-thickness solid로 변환된 것
+- VALVE_ASM 부품엔 collapsed actor가 부품 marker로 부착 (multi-leaf, merged=2.46cm)
+- LATCH/SHUTTER 단축 collapsed (single-leaf) — sheet metal 같은 얇은 형상 또는 import 결함
+
+**Phase 2 → Phase 3 입력**:
+- Visibility culling 단계에서 collapsed actor 자동 cull 후보 (시각적 비중 0)
+- CAD 팀 확인 (선택): import 결함 vs 의도된 데이터 (sheet metal 표현)
 
 ## 7. 미래 비교용 baseline metric
 
@@ -131,6 +152,8 @@ SMALL_AT_2.0_CM = 18164      # 39.7%
 SMALL_AT_5.0_CM = 32241      # 70.4%
 SMALL_AT_10.0_CM = 38095     # 83.2%
 SMALLEST_10_MULTI_LEAF_RATIO = 0.30   # 3/10
+COLLAPSED_AXIS_COUNT = 1249           # 2.73% of measured (Phase 2 #4/#5)
+SMALLEST_10_COLLAPSED_RATIO = 1.00    # 10/10 (Phase 2 #4/#5)
 ```
 
 ## 8. 관련 산출물

@@ -63,41 +63,29 @@
 
 ---
 
-## 4. F4 zero-bbox epsilon
+## 4. ✅ F4 zero-bbox epsilon + collapsed flag (완료 2026-06-01, #5와 묶음)
 
-**출처**: F4 1차 검증 self-review #1, `docs/measurements/f4_c1yc_2_mcm.md` Section 6
+**출처**: F4 1차 검증 self-review #1, `docs/measurements/f4_c1yc_2_mcm.md` §6.1
 
-**발견 정황**:
-- 현재 zero-bbox 분기는 `extent.x == 0 and y == 0 and z == 0` (3축 모두 정확히 0)
-- C1YC_2_MCM smallest 10의 #1~8이 0.001 cm — extent.x=0.001, y=0, z=0 같은 한 축 collapsed actor
-- 이게 zero-bbox 분기를 통과하여 measurement에 포함됨 (의도된 동작 — 진단 신호로 surfacing)
+**해결**:
+- `_COLLAPSED_AXIS_HALF_CM = 0.005` (full extent < 0.01 cm) epsilon 도입
+- 3축 모두 0 (`skipped_zero_bbox`) 와 구분, 1~2축 collapsed = measurement 포함 + flag
+- `SmallPartMeasurement.is_collapsed_axis` + `SmallPartDetectionReport.collapsed_axis_count`
 
-**미룬 이유**:
-- Phase 1에서 "진단 신호 surfacing"으로 판단. 실제 PCVR cull 후보 1순위로 정확
-- epsilon 도입은 정책 결정 (어디까지 0으로 볼 것인가) — 데이터 더 보고 결정
-
-**Phase 2 액션**:
-- 0.001 cm 같은 collapsed actor를 어떻게 처리할지 정책 결정 (다음 항목 5와 묶음)
-- epsilon 값 결정 후 zero-bbox 분기 보강 vs 별도 카운터 (`skipped_collapsed`) 추가
+**C1YC_2_MCM 실측**: 1,249개 collapsed (전체 2.73%) + smallest 10 100% collapsed.
 
 ---
 
-## 5. F4 한 축 collapsed actor 처리 정책
+## 5. ✅ F4 한 축 collapsed actor 처리 정책 (완료 2026-06-01, #4와 묶음)
 
-**출처**: 위 4와 동반 발견
+**해결 (옵션: surfacing only 첫 iteration)**:
+- Measurement에 포함, `is_collapsed_axis` flag로 진단 (제외 안 함)
+- CSV/Output Log로 사용자가 인지 가능
+- F8 tier 영향 없음 (현재 정책: surfacing only)
 
-**발견 정황**:
-- 한 축 collapsed actor (예: extent x=0.001, y=0, z=0)는 의미상 면/선/점 — 시각적 비중 0
-- 현재는 small part로 정확히 surfacing되어 사용자가 인지함
-
-**미룬 이유**:
-- 처리 정책 (cull / re-import / 무시) 미결정. CAD pipeline 상류에서 발생한 import 결함일 가능성 — 처리 위치가 F4가 아닐 수 있음
-- Phase 1 = detection only
-
-**Phase 2 액션**:
-- collapsed actor가 import 결함인지 의도된 데이터인지 Design Center 확인
-- 결함이면 import 단계에서 처리 (Datasmith reimport / source CAD fix)
-- 의도된 데이터면 별도 카테고리 (`COLLAPSED`) 부여하여 PCVR cull 후보로 명시
+**Phase 3 입력 (다음 단계)**:
+- Visibility culling에서 collapsed actor 자동 cull 후보 (시각적 비중 0)
+- CAD 팀 확인 (선택, blocker 아님): import 결함 vs 의도된 데이터 (sheet metal 표현)
 
 ---
 
