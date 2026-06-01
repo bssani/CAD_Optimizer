@@ -535,6 +535,11 @@ def _write_small_parts_csv(
             "AABB union diagonal. Single-leaf은 self diagonal. is_small "
             "판정은 기존 bbox_diagonal_cm 유지 (surfacing only).\n"
         )
+        f.write(
+            "# is_collapsed_axis: Phase 2 backlog #4/#5 — 단축 collapsed "
+            "(half-extent < 0.005 cm, 즉 full extent < 0.01 cm). 진단 신호. "
+            "measurement에 포함됨 (제외 안 함).\n"
+        )
         writer = csv.writer(f)
         writer.writerow([
             "rank",
@@ -554,6 +559,7 @@ def _write_small_parts_csv(
             "is_small",
             "parent_leaf_count",
             "is_multi_leaf",
+            "is_collapsed_axis",     # Phase 2 backlog #4/#5 — 단축 collapsed 진단
             "bbox_origin_x_cm",       # Phase 2 backlog #3 — world center
             "bbox_origin_y_cm",
             "bbox_origin_z_cm",
@@ -583,6 +589,7 @@ def _write_small_parts_csv(
                 report.is_small(m),
                 m.parent_leaf_count,
                 m.is_multi_leaf,
+                m.is_collapsed_axis,
                 f"{m.bbox_origin_x_cm:.3f}",
                 f"{m.bbox_origin_y_cm:.3f}",
                 f"{m.bbox_origin_z_cm:.3f}",
@@ -692,6 +699,9 @@ def _log_small_parts_summary(
         f"{report.skipped_zero_bbox} zero-bbox",
         f"  Root-level (no attach parent, measured): "
         f"{report.skipped_no_attach_parent}",
+        f"  Collapsed axis (measured, diagnostic): "
+        f"{report.collapsed_axis_count} "
+        f"(1+ axis half-extent < 0.005 cm)",
         f"  Measured: {measured} actors",
         f"  Threshold: {report.threshold_cm:.2f} cm (diagonal){preset_str}",
         f"  Small parts: {small_count} / {measured} ({pct:.1f}%)",
@@ -722,16 +732,20 @@ def _log_small_parts_summary(
     if smallest:
         for i, m in enumerate(smallest, start=1):
             # Multi-leaf 부품엔 합산 diagonal 같이 표시 (Phase 2 backlog #3).
-            # leaf bbox 와 차이가 클수록 multi-leaf 부품의 진짜 크기 정보.
-            multi_tag = (
-                f"  multi={m.parent_leaf_count}"
-                f" merged={m.bbox_diagonal_cm_merged:.2f}cm"
-                if m.is_multi_leaf else ""
-            )
+            # Collapsed-axis 마커 (#4/#5) 도 추가 — 0.00cm 라벨의 진단 컨텍스트.
+            tag_parts = []
+            if m.is_multi_leaf:
+                tag_parts.append(
+                    f"multi={m.parent_leaf_count} "
+                    f"merged={m.bbox_diagonal_cm_merged:.2f}cm"
+                )
+            if m.is_collapsed_axis:
+                tag_parts.append("collapsed")
+            tag = ("  " + " ".join(tag_parts)) if tag_parts else ""
             lines.append(
                 f"    #{i:<2} {m.bbox_diagonal_cm:>6.2f}cm  "
                 f"{_format_parent_for_log(m):<55s}  "
-                f"[{m.mobility_name}]{multi_tag}"
+                f"[{m.mobility_name}]{tag}"
             )
     else:
         lines.append("    (no measurements)")
