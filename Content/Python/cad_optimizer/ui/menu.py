@@ -114,6 +114,35 @@ class CADOptimizerOrganizeISMHoldersCommand(unreal.ToolMenuEntryScript):
         run_organize_ism_holders()
 
 
+@unreal.uclass()
+class CADOptimizerCullHighCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_apply_visibility_culling_high
+
+        run_apply_visibility_culling_high()
+
+
+@unreal.uclass()
+class CADOptimizerCullHighMidCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import (
+            run_apply_visibility_culling_high_mid,
+        )
+
+        run_apply_visibility_culling_high_mid()
+
+
+@unreal.uclass()
+class CADOptimizerRestoreP3VisibilityCommand(unreal.ToolMenuEntryScript):
+    @unreal.ufunction(override=True)
+    def execute(self, context) -> None:
+        from cad_optimizer.ui.panel import run_restore_p3_visibility
+
+        run_restore_p3_visibility()
+
+
 def _register(script: unreal.ToolMenuEntryScript, name: str, label: str, tool_tip: str) -> None:
     script.init_entry(
         owner_name="CADOptimizer",
@@ -210,6 +239,27 @@ def register_menu() -> None:
         tool_tip="Phase 2: 기존 BP_ISMHolder들을 'ISM_Merged/' outliner folder로 "
                  "일괄 이동. 'CADOpt_P2_Merged_*' tag 보유 actor만 대상. "
                  "Idempotent. 이전 코드 버전으로 머지된 holder 정리용.",
+    )
+    _register(
+        CADOptimizerCullHighCommand(),
+        name="CADOptimizer.Cull.High",
+        label="🙈 Cull Visibility (Phase 3) — High only (보수)",
+        tool_tip="Phase 3: CADOpt_F8_Cull_High tag 보유 actor 만 hidden. "
+                 "set_actor_hidden_in_game(True) + sentinel tag. Level dirty.",
+    )
+    _register(
+        CADOptimizerCullHighMidCommand(),
+        name="CADOptimizer.Cull.HighMid",
+        label="🙈 Cull Visibility (Phase 3) — High + Mid (적극)",
+        tool_tip="Phase 3: Cull_High + Cull_Mid tag 보유 actor 모두 hidden. "
+                 "보수 대비 더 많은 actor cull. Idempotent. Level dirty.",
+    )
+    _register(
+        CADOptimizerRestoreP3VisibilityCommand(),
+        name="CADOptimizer.Cull.Restore",
+        label="👁️ Restore P3 Visibility",
+        tool_tip="Phase 3: CADOpt_P3_Hidden tag 보유 actor 일괄 복원. "
+                 "hidden_in_game=False + P3 sentinel tag 제거. Idempotent.",
     )
 
     unreal.ToolMenus.get().refresh_all_widgets()
