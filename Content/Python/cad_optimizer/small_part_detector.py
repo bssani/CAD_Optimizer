@@ -48,6 +48,13 @@ PRESETS: Dict[str, float] = {
     "Medium": 5.0,  # 작은 부품 일반 (washer, bracket, small housing)
 }
 
+# Phase 2 backlog #4/#5 — collapsed axis 진단.
+# half-extent < 0.005 cm = full extent < 0.01 cm. Datasmith CAD import 시
+# 한 축이 정확히 0 또는 0.001 cm 근처가 일반적 (BREP의 면/선/점이 0-thickness
+# solid로 표현됨). 3축 모두 0 = zero_bbox (measurement 제외). 1~2축 collapsed
+# = measurement 포함 + flag 부여 (진단 신호 유지).
+_COLLAPSED_AXIS_HALF_CM: float = 0.005
+
 # Multi-threshold simulation 표시 값 (cm). re-threshold simulation은 free.
 SIMULATION_THRESHOLDS_CM: List[float] = [0.5, 1.0, 2.0, 5.0, 10.0]
 
@@ -100,6 +107,10 @@ class SmallPartMeasurement:
     # Multi-leaf group의 AABB union diagonal (single-leaf은 self diagonal).
     # Pass 3에서 채움. small 판정은 기존 ``bbox_diagonal_cm`` 유지 — surfacing only.
     bbox_diagonal_cm_merged: float = 0.0
+    # Phase 2 backlog #4/#5 — 단축 collapsed 진단.
+    # extent half < _COLLAPSED_AXIS_HALF_CM 인 축이 1개 이상 (3축 모두 0은
+    # skipped_zero_bbox 로 measurement 제외, collapsed는 1~2축).
+    is_collapsed_axis: bool = False
 
     def get_label(self) -> str:
         """Lazy label resolution (F3 lesson — avoid editor round-trip
@@ -119,6 +130,9 @@ class SmallPartDetectionReport:
                                    # measurements 리스트에 포함됨, 카운트만 별도.
     measurements: List[SmallPartMeasurement]  # sorted by diagonal asc
     threshold_cm: float
+    # Phase 2 backlog #4/#5 — collapsed axis 진단.
+    # ※ MEASURED. measurements 안의 ``is_collapsed_axis=True`` 카운트.
+    collapsed_axis_count: int = 0
 
     def is_small(self, m: SmallPartMeasurement) -> bool:
         return m.bbox_diagonal_cm < self.threshold_cm
@@ -296,6 +310,7 @@ def detect_small_parts(
     no_mesh = 0
     zero_bbox = 0
     no_attach_parent = 0
+    collapsed_count = 0
 
     # ─── Pass 1: measure + collect parent info ───
     for actor in actors:
@@ -333,6 +348,16 @@ def detect_small_parts(
             zero_bbox += 1
             on_progress()
             continue
+
+        # Phase 2 backlog #4/#5 — 단축 collapsed 진단 (1~2축이 epsilon 미만).
+        # 3축 모두 0 케이스는 위에서 zero_bbox로 제외됨.
+        is_collapsed_axis = (
+            extent.x < _COLLAPSED_AXIS_HALF_CM
+            or extent.y < _COLLAPSED_AXIS_HALF_CM
+            or extent.z < _COLLAPSED_AXIS_HALF_CM
+        )
+        if is_collapsed_axis:
+            collapsed_count += 1
 
         bx = extent.x * 2.0
         by = extent.y * 2.0
@@ -379,6 +404,8 @@ def detect_small_parts(
                 bbox_origin_y_cm=origin.y,
                 bbox_origin_z_cm=origin.z,
                 # bbox_diagonal_cm_merged set in pass 3
+                # Phase 2 backlog #4/#5
+                is_collapsed_axis=is_collapsed_axis,
             )
         )
 
@@ -442,4 +469,5 @@ def detect_small_parts(
         skipped_no_attach_parent=no_attach_parent,
         measurements=measurements,
         threshold_cm=threshold_cm,
+        collapsed_axis_count=collapsed_count,
     )
