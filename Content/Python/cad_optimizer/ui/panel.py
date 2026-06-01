@@ -1445,6 +1445,121 @@ def run_organize_ism_holders() -> None:
     unreal.log("=" * 60)
 
 
+# ─── Phase 3: Visibility Culling ────────────────────────────────────
+
+
+def _make_p3_csv_path(suffix: str) -> str:
+    """`Saved/CAD_Optimizer/p3_visibility_{suffix}_{ts}.csv`."""
+    saved_dir = unreal.Paths.project_saved_dir()
+    out_dir = os.path.join(saved_dir, "CAD_Optimizer")
+    os.makedirs(out_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(out_dir, f"p3_visibility_{suffix}_{ts}.csv")
+
+
+def _run_visibility_culling(tiers_label: str, target_tiers) -> None:
+    """Phase 3 cull entry — F8 tag 보유 actor 영구 hidden 처리."""
+    from cad_optimizer.visibility_culler import apply_visibility_culling
+
+    unreal.log("=" * 60)
+    unreal.log(
+        f"[CAD_Optimizer Phase 3] Visibility Culling — {tiers_label}"
+    )
+    unreal.log("=" * 60)
+
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    all_actors = list(eas.get_all_level_actors())
+    suffix = tiers_label.lower().replace(" ", "_").replace("+", "_")
+    csv_path = _make_p3_csv_path(f"cull_{suffix}")
+
+    # ScopedSlowTask — target 카운트를 미리 못 알아서 actor 수 기준 + sub-step
+    # 패턴 안 씀. visibility_culler 가 progress_callback 으로 i/total 보고.
+    with unreal.ScopedSlowTask(
+        len(all_actors),
+        f"Phase 3 Visibility Culling ({tiers_label})",
+    ) as slow_task:
+        slow_task.make_dialog(True)
+        last_step = [0]
+
+        def _progress_adapter(current: int, total: int, msg: str) -> bool:
+            # current 는 0-based target index. all_actors 대비 작아 progress
+            # bar 일관성은 떨어지지만 cancel 가능.
+            steps = max(1, total)
+            inc = int(len(all_actors) * (current - last_step[0]) / steps)
+            if inc > 0:
+                slow_task.enter_progress_frame(inc, msg)
+                last_step[0] = current
+            return not bool(slow_task.should_cancel())
+
+        result = apply_visibility_culling(
+            actors=all_actors,
+            target_tiers=target_tiers,
+            csv_out_path=csv_path,
+            progress_callback=_progress_adapter,
+            plugin_commit="(see git log)",
+        )
+
+    unreal.log(f"[Phase 3] Targets (F8 tag matched): {result.target_count}")
+    unreal.log(f"[Phase 3] Newly hidden: {result.newly_hidden}")
+    unreal.log(f"[Phase 3] Already hidden (idempotent): {result.already_hidden}")
+    unreal.log(f"[Phase 3] Skipped (invalid/fail): {result.skipped}")
+    for tier, cnt in sorted(result.tier_breakdown.items()):
+        unreal.log(f"[Phase 3]   {tier}: {cnt}")
+    if result.newly_hidden > 0:
+        unreal.log_warning(
+            "[Phase 3] Level dirty — save 필요. "
+            "Undo (Ctrl+Z) 또는 'Restore P3 Visibility' 메뉴로 revert."
+        )
+    unreal.log(f"[Phase 3] CSV: {result.csv_path}")
+    unreal.log("=" * 60)
+
+
+def run_apply_visibility_culling_high() -> None:
+    """Phase 3 entry — Cull_High 만 hidden 처리 (보수적)."""
+    from cad_optimizer.visibility_culler import TIER_CULL_HIGH
+    _run_visibility_culling("Cull_High only", frozenset({TIER_CULL_HIGH}))
+
+
+def run_apply_visibility_culling_high_mid() -> None:
+    """Phase 3 entry — Cull_High + Cull_Mid 모두 hidden 처리 (적극)."""
+    from cad_optimizer.visibility_culler import (
+        DEFAULT_TARGET_TIERS,
+    )
+    _run_visibility_culling("Cull_High + Cull_Mid", DEFAULT_TARGET_TIERS)
+
+
+def run_restore_p3_visibility() -> None:
+    """Phase 3 cleanup — ``CADOpt_P3_Hidden`` tag 보유 actor 일괄 복원."""
+    from cad_optimizer.visibility_culler import restore_visibility_by_tag
+
+    unreal.log("=" * 60)
+    unreal.log("[CAD_Optimizer Phase 3] Restore P3 Visibility")
+    unreal.log("=" * 60)
+
+    eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    all_actors = list(eas.get_all_level_actors())
+
+    with unreal.ScopedSlowTask(
+        len(all_actors), "Phase 3 Restore Visibility"
+    ) as slow_task:
+        slow_task.make_dialog(True)
+
+        def _progress_adapter(current: int, total: int, msg: str) -> bool:
+            slow_task.enter_progress_frame(1, msg)
+            return not bool(slow_task.should_cancel())
+
+        result = restore_visibility_by_tag(
+            actors=all_actors,
+            progress_callback=_progress_adapter,
+        )
+
+    unreal.log(f"[Phase 3] Restored: {result['restored']}")
+    unreal.log(f"[Phase 3] Skipped: {result['skipped']}")
+    if result["restored"] > 0:
+        unreal.log_warning("[Phase 3] Level dirty — save 필요.")
+    unreal.log("=" * 60)
+
+
 # ─── Widget helper plumbing (shared by F2) ──────────────────────────
 
 
